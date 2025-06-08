@@ -45,6 +45,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
   const lastPanPointRef = useRef<Point | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const lastDrawingUpdateRef = useRef<number>(0);
+  const redrawTimeoutRef = useRef<number | null>(null);
 
   const { zoom, offset, tool, color, size, showCoordinates } = canvasState;
 
@@ -99,6 +100,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     ctx.lineWidth = path.size / zoom;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation = 'source-over'; // 确保正常绘制模式
     
     ctx.beginPath();
     
@@ -106,24 +108,32 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       // 单点绘制为小圆圈
       const point = path.points[0];
       ctx.fillStyle = path.color;
+      ctx.beginPath();
       ctx.arc(point.x, point.y, path.size / zoom / 2, 0, Math.PI * 2);
       ctx.fill();
+    } else if (path.points.length === 2) {
+      // 两点绘制为直线
+      ctx.moveTo(path.points[0].x, path.points[0].y);
+      ctx.lineTo(path.points[1].x, path.points[1].y);
+      ctx.stroke();
     } else {
-      // 多点绘制为平滑路径
+      // 多点绘制为平滑曲线
       ctx.moveTo(path.points[0].x, path.points[0].y);
       
-      for (let i = 1; i < path.points.length; i++) {
-        const prevPoint = path.points[i - 1];
+      // 使用二次贝塞尔曲线创建平滑路径
+      for (let i = 1; i < path.points.length - 1; i++) {
         const currentPoint = path.points[i];
-        const midX = (prevPoint.x + currentPoint.x) / 2;
-        const midY = (prevPoint.y + currentPoint.y) / 2;
+        const nextPoint = path.points[i + 1];
+        const midX = (currentPoint.x + nextPoint.x) / 2;
+        const midY = (currentPoint.y + nextPoint.y) / 2;
         
-        ctx.quadraticCurveTo(prevPoint.x, prevPoint.y, midX, midY);
+        ctx.quadraticCurveTo(currentPoint.x, currentPoint.y, midX, midY);
       }
       
-      // 绘制最后一段
+      // 绘制到最后一个点
       const lastPoint = path.points[path.points.length - 1];
-      ctx.lineTo(lastPoint.x, lastPoint.y);
+      const secondLastPoint = path.points[path.points.length - 2];
+      ctx.quadraticCurveTo(secondLastPoint.x, secondLastPoint.y, lastPoint.x, lastPoint.y);
       ctx.stroke();
     }
     
@@ -207,8 +217,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     }
 
     const now = Date.now();
-    // 限制更新频率为60fps
-    if (now - lastDrawingUpdateRef.current < 16) return;
+    // 限制更新频率为30fps，减少重绘频率
+    if (now - lastDrawingUpdateRef.current < 33) return;
     
     lastDrawingUpdateRef.current = now;
 
@@ -216,6 +226,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       ...currentPath,
       points: [...currentPath.points, coords]
     };
+    
+    // 使用批量更新，减少重绘次数
     setCurrentPath(updatedPath);
     
     console.log('🖌️ 更新绘画路径:', { 
@@ -441,28 +453,39 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
 
     socket.on('drawing_started', ({ path }) => {
       console.log('收到新绘画:', path);
-      setDrawingPaths(prev => [...prev, path]);
       
       if (path.userId === currentUser.id) {
+        // 这是当前用户的路径，更新当前路径的ID，但不添加到drawingPaths中
         setCurrentPathId(path.id);
-        // 更新当前路径的ID - 这是关键修复
         setCurrentPath(prev => prev ? { ...prev, id: path.id } : null);
         console.log('更新当前路径ID:', path.id);
+      } else {
+        // 这是其他用户的路径，添加到drawingPaths中
+        setDrawingPaths(prev => [...prev, path]);
       }
     });
 
     socket.on('drawing_updated', ({ pathId, points }) => {
       console.log('收到绘画更新:', { pathId, pointsCount: points.length });
-      setDrawingPaths(prev => 
-        prev.map(path => 
-          path.id === pathId ? { ...path, points } : path
-        )
-      );
       
-      // 如果是其他用户的绘画更新，也要更新本地显示
-      // 但不更新当前正在绘制的路径，避免冲突
+      // 只更新其他用户的路径，不更新当前正在绘制的路径
       if (pathId !== currentPathId) {
-        // 这是其他用户的绘画更新，直接应用
+        setDrawingPaths(prev => 
+          prev.map(path => 
+            path.id === pathId ? { ...path, points } : path
+          )
+        );
+      }
+    });
+
+    socket.on('drawing_ended', ({ pathId }) => {
+      console.log('收到绘画结束:', pathId);
+      
+      // 如果是当前用户的路径结束，将当前路径移动到drawingPaths中
+      if (pathId === currentPathId && currentPath) {
+        setDrawingPaths(prev => [...prev, { ...currentPath, id: pathId }]);
+        setCurrentPath(null);
+        setCurrentPathId(null);
       }
     });
 
@@ -483,27 +506,49 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     return () => {
       socket.off('drawing_started');
       socket.off('drawing_updated');
+      socket.off('drawing_ended');
       socket.off('drawings_cleared');
     };
-  }, [socket, currentUser.id, currentPathId]);
+  }, [socket, currentUser.id, currentPathId, currentPath]);
 
   // 使用requestAnimationFrame优化重绘
   useEffect(() => {
     const scheduleRedraw = () => {
+      // 清除之前的重绘请求
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      animationFrameRef.current = requestAnimationFrame(redrawCanvas);
+      if (redrawTimeoutRef.current) {
+        clearTimeout(redrawTimeoutRef.current);
+      }
+      
+      // 如果正在绘画，立即重绘以保持流畅性
+      if (isDrawing) {
+        animationFrameRef.current = requestAnimationFrame(() => {
+          redrawCanvas();
+        });
+      } else {
+        // 如果不在绘画，使用防抖延迟重绘
+        redrawTimeoutRef.current = window.setTimeout(() => {
+          animationFrameRef.current = requestAnimationFrame(() => {
+            redrawCanvas();
+          });
+        }, 16); // 16ms 防抖
+      }
     };
 
+    // 只在必要时重绘
     scheduleRedraw();
 
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
+      if (redrawTimeoutRef.current) {
+        clearTimeout(redrawTimeoutRef.current);
+      }
     };
-  }, [redrawCanvas]);
+  }, [zoom, offset, drawingPaths, currentPath, showCoordinates, isDrawing, redrawCanvas]); // 添加isDrawing依赖
 
   // 设置画布光标
   useEffect(() => {
