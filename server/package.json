@@ -1,12 +1,16 @@
 {
   "name": "infinite-canvas-server",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "src/simple-server.js",
   "scripts": {
     "dev": "node src/simple-server.js",
-    "build": "tsc",
-    "start": "node src/simple-server.js",
+    "build": "echo 'No build step required'",
+    "start": "NODE_ENV=production node src/simple-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   },
   "keywords": [
     "canvas",
@@ -15,9 +19,9 @@
     "real-time",
     "socket.io"
   ],
-  "author": "",
+  "author": "Wonderland Team",
   "license": "MIT",
-  "description": "无限画布服务器 - 支持实时协作绘画",
+  "description": "无限画布服务器 - 支持实时协作绘画和用户账户管理",
   "dependencies": {
     "@types/express": "^5.0.2",
     "@types/node": "^22.15.21",

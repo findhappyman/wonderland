@@ -1,0 +1,17 @@
+{
+  "build": {
+    "env": {
+      "VITE_SERVER_URL": "https://wonderland-server-production.up.railway.app"
+    }
+  },
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+} 

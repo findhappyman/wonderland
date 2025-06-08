@@ -1,0 +1,37 @@
+{
+  "name": "wonderland",
+  "version": "1.0.0",
+  "description": "无限画布协作绘画平台 - 支持实时多人协作和用户账户管理",
+  "main": "server/src/simple-server.js",
+  "scripts": {
+    "start": "cd server && npm start",
+    "build": "cd server && npm install",
+    "dev": "cd server && npm run dev",
+    "install-server": "cd server && npm install",
+    "install-client": "cd client && npm install",
+    "install-all": "npm run install-server && npm run install-client"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "canvas",
+    "drawing",
+    "collaboration",
+    "real-time",
+    "socket.io",
+    "react",
+    "typescript"
+  ],
+  "author": "Wonderland Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/findhappyman/wonderland.git"
+  },
+  "homepage": "https://github.com/findhappyman/wonderland#readme",
+  "bugs": {
+    "url": "https://github.com/findhappyman/wonderland/issues"
+  }
+} 
