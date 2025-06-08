@@ -1,7 +1,7 @@
 {
   "build": {
     "env": {
-      "VITE_SERVER_URL": "https://wonderland-server-production.up.railway.app"
+      "VITE_SERVER_URL": "https://wonderland-production-1e87.up.railway.app"
     }
   },
   "installCommand": "npm install",
