@@ -9,7 +9,7 @@ interface UseSocketReturn {
   currentUser: User | null;
   isLoggedIn: boolean;
   loginError: string | null;
-  login: (userId: string, username: string) => void;
+  login: (userId: string, username: string, password: string) => void;
   logout: () => void;
 }
 
@@ -180,13 +180,13 @@ export const useSocket = (): UseSocketReturn => {
   }, []);
 
   // 登录函数
-  const login = (userId: string, username: string) => {
+  const login = (userId: string, username: string, password: string) => {
     if (!socket) {
       setLoginError('Socket未初始化');
       return;
     }
 
-    console.log('🚀 开始登录:', { userId, username });
+    console.log('🚀 开始登录:', { userId, username, passwordLength: password.length });
     setLoginError(null);
 
     // 连接到服务器
@@ -209,7 +209,8 @@ export const useSocket = (): UseSocketReturn => {
       socket.emit('join_room', {
         roomId: 'global',
         username: username,
-        userId: userId
+        userId: userId,
+        password: password
       });
     };
 

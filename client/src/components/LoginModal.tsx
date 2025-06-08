@@ -3,7 +3,7 @@ import '../styles/LoginModal.css';
 
 interface LoginModalProps {
   isOpen: boolean;
-  onLogin: (userId: string, username: string) => void;
+  onLogin: (userId: string, username: string, password: string) => void;
   isConnecting: boolean;
   error?: string;
 }
@@ -11,6 +11,8 @@ interface LoginModalProps {
 const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLogin, isConnecting, error }) => {
   const [userId, setUserId] = useState('');
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isFormValid, setIsFormValid] = useState(false);
 
   // 生成随机建议的用户ID
@@ -33,23 +35,35 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLogin, isConnecting, 
     return `${adjective}${noun}${number}`;
   };
 
+  // 生成随机密码
+  const generateSuggestedPassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let password = '';
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  };
+
   // 验证表单
   useEffect(() => {
     const isUserIdValid = userId.trim().length >= 3 && userId.trim().length <= 20;
     const isUsernameValid = username.trim().length >= 2 && username.trim().length <= 20;
-    setIsFormValid(isUserIdValid && isUsernameValid && !isConnecting);
-  }, [userId, username, isConnecting]);
+    const isPasswordValid = password.trim().length >= 6 && password.trim().length <= 50;
+    setIsFormValid(isUserIdValid && isUsernameValid && isPasswordValid && !isConnecting);
+  }, [userId, username, password, isConnecting]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isFormValid) {
-      onLogin(userId.trim(), username.trim());
+      onLogin(userId.trim(), username.trim(), password.trim());
     }
   };
 
   const handleGenerateRandom = () => {
     setUserId(generateSuggestedId());
     setUsername(generateSuggestedUsername());
+    setPassword(generateSuggestedPassword());
   };
 
   if (!isOpen) return null;
@@ -91,6 +105,30 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLogin, isConnecting, 
             <small>在画布上显示的名称</small>
           </div>
 
+          <div className="form-group">
+            <label htmlFor="password">登录密码 *</label>
+            <div className="password-input-container">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="请输入6-50字符的密码"
+                maxLength={50}
+                disabled={isConnecting}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="password-toggle"
+                disabled={isConnecting}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <small>密码用于保护你的账户安全</small>
+          </div>
+
           {error && (
             <div className="error-message">
               ❌ {error}
@@ -127,6 +165,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onLogin, isConnecting, 
         </form>
 
         <div className="login-footer">
+          <p>🔐 你的账户信息将被安全保护</p>
           <p>✨ 支持多人实时协作绘画</p>
           <p>🌍 与全世界的艺术家一起创作</p>
         </div>

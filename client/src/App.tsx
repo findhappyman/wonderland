@@ -52,9 +52,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = (userId: string, username: string) => {
-    console.log('🚀 App: 开始登录', { userId, username });
-    login(userId, username);
+  const handleLogin = (userId: string, username: string, password: string) => {
+    console.log('🚀 App: 开始登录', { userId, username, passwordLength: password.length });
+    login(userId, username, password);
   };
 
   const handleLogout = () => {

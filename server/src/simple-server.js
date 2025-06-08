@@ -3,6 +3,7 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const server = createServer(app);
@@ -42,6 +43,86 @@ const rooms = new Map();
 
 // 存储IP地址对应的用户信息
 const ipUserMap = new Map();
+
+// 存储用户账户数据（用户名+密码）
+const userDatabase = new Map();
+
+// 密码哈希轮数
+const SALT_ROUNDS = 10;
+
+// 密码验证函数
+async function validatePassword(password) {
+  if (!password || typeof password !== 'string') {
+    return { valid: false, message: '密码不能为空' };
+  }
+  
+  if (password.length < 6) {
+    return { valid: false, message: '密码长度至少6个字符' };
+  }
+  
+  if (password.length > 50) {
+    return { valid: false, message: '密码长度不能超过50个字符' };
+  }
+  
+  return { valid: true };
+}
+
+// 创建或验证用户账户
+async function createOrValidateUser(userId, username, password) {
+  try {
+    // 检查用户是否已存在
+    if (userDatabase.has(userId)) {
+      const existingUser = userDatabase.get(userId);
+      
+      // 验证密码
+      const passwordMatch = await bcrypt.compare(password, existingUser.passwordHash);
+      if (!passwordMatch) {
+        return { success: false, message: '密码错误' };
+      }
+      
+      // 检查用户名是否匹配
+      if (existingUser.username !== username) {
+        return { success: false, message: '用户名与已注册的不匹配' };
+      }
+      
+      return { 
+        success: true, 
+        user: existingUser,
+        isNewUser: false 
+      };
+    } else {
+      // 检查用户名是否被其他用户使用
+      for (const [existingUserId, existingUser] of userDatabase.entries()) {
+        if (existingUser.username.toLowerCase() === username.toLowerCase() && existingUserId !== userId) {
+          return { success: false, message: '用户名已被其他用户使用' };
+        }
+      }
+      
+      // 创建新用户
+      const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+      const newUser = {
+        userId: userId,
+        username: username,
+        passwordHash: passwordHash,
+        color: generateRandomColor(),
+        createdAt: new Date(),
+        lastLogin: new Date()
+      };
+      
+      userDatabase.set(userId, newUser);
+      console.log(`🆕 创建新用户账户: ${userId} (${username})`);
+      
+      return { 
+        success: true, 
+        user: newUser,
+        isNewUser: true 
+      };
+    }
+  } catch (error) {
+    console.error('创建或验证用户错误:', error);
+    return { success: false, message: '服务器错误，请重试' };
+  }
+}
 
 // 生成随机颜色
 function generateRandomColor() {
@@ -159,8 +240,8 @@ io.on('connection', (socket) => {
   let currentUser = null;
   let currentRoomId = null;
 
-  // 用户加入房间（支持自定义用户ID）
-  socket.on('join_room', ({ roomId, username, userId }) => {
+  // 用户加入房间（支持用户名+密码登录）
+  socket.on('join_room', async ({ roomId, username, userId, password }) => {
     try {
       console.log(`🚪 收到加入房间请求:`, { roomId, username, userId, socketId: socket.id });
 
@@ -176,6 +257,25 @@ io.on('connection', (socket) => {
         return;
       }
 
+      // 验证密码
+      const passwordValidation = await validatePassword(password);
+      if (!passwordValidation.valid) {
+        socket.emit('error', { message: passwordValidation.message });
+        return;
+      }
+
+      // 创建或验证用户账户
+      const finalUserId = userId ? userId.trim() : socket.id;
+      const userValidation = await createOrValidateUser(finalUserId, username.trim(), password);
+      
+      if (!userValidation.success) {
+        socket.emit('error', { message: userValidation.message });
+        return;
+      }
+
+      const userAccount = userValidation.user;
+      const isNewUser = userValidation.isNewUser;
+
       // 如果用户已经在其他房间，先离开
       if (currentRoomId && currentUser) {
         console.log(`🚪 离开旧房间: ${currentRoomId}`);
@@ -190,48 +290,40 @@ io.on('connection', (socket) => {
         }
       }
 
-      // 创建用户信息
-      const finalUserId = userId ? userId.trim() : socket.id;
-      
-      // 如果提供了自定义用户ID，检查是否已被占用
+      // 获取房间并检查当前在线用户
       const room = getOrCreateRoom(roomId);
-      if (userId) {
-        const existingUser = Array.from(room.users.values()).find(
-          user => user.customId === finalUserId && user.id !== socket.id
-        );
-        if (existingUser) {
-          socket.emit('error', { message: `用户ID "${finalUserId}" 已被占用，请选择其他ID` });
-          return;
-        }
-      }
-
-      // 检查用户名是否已存在（排除当前用户）
-      const existingUsername = Array.from(room.users.values()).find(
-        user => user.username.toLowerCase() === username.toLowerCase() && user.id !== socket.id
+      
+      // 检查用户是否已在房间中（防止重复登录）
+      const existingRoomUser = Array.from(room.users.values()).find(
+        user => user.customId === finalUserId && user.id !== socket.id
       );
-      if (existingUsername) {
-        socket.emit('error', { message: '用户名已存在，请选择其他用户名' });
+      if (existingRoomUser) {
+        socket.emit('error', { message: '该账户已在其他地方登录，请先退出或使用不同的账户' });
         return;
       }
 
-      // 创建用户对象
+      // 创建用户对象（房间内的用户信息）
       currentUser = {
         id: socket.id,
-        customId: finalUserId, // 自定义用户ID
-        username: username.trim(),
-        color: generateRandomColor(),
+        customId: finalUserId,
+        username: userAccount.username,
+        color: userAccount.color,
         ip: clientIP,
         isOnline: true,
         joinedAt: new Date()
       };
 
-      console.log(`👤 用户信息创建完成:`, { 
+      console.log(`👤 用户${isNewUser ? '注册并' : ''}登录成功:`, { 
         socketId: currentUser.id,
         customId: currentUser.customId,
         username: currentUser.username, 
         color: currentUser.color,
-        ip: currentUser.ip 
+        isNewUser: isNewUser
       });
+
+      // 更新用户最后登录时间
+      userAccount.lastLogin = new Date();
+      userDatabase.set(finalUserId, userAccount);
 
       currentRoomId = roomId;
       
@@ -285,10 +377,10 @@ io.on('connection', (socket) => {
       
       socket.to(roomId).emit('user_joined', userJoinedData);
 
-      console.log(`✅ 用户 ${currentUser.username} (Custom ID: ${currentUser.customId}, IP: ${clientIP}) 成功加入房间 ${roomId}`);
+      console.log(`✅ 用户 ${currentUser.username} (ID: ${currentUser.customId}, IP: ${clientIP}) 成功${isNewUser ? '注册并' : ''}加入房间 ${roomId}`);
     } catch (error) {
       console.error('❌ 加入房间错误:', error);
-      socket.emit('error', { message: '加入房间失败: ' + error.message });
+      socket.emit('error', { message: '登录失败: ' + error.message });
     }
   });
 
