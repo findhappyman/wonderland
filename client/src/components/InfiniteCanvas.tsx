@@ -211,8 +211,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
 
   // 绘画更新函数
   const updateDrawing = useCallback((coords: Point) => {
-    if (!socket || !currentPath) {
-      console.log('⚠️ updateDrawing 跳过:', { socket: !!socket, currentPath: !!currentPath });
+    if (!socket || !currentPath || !currentUser) {
+      console.log('⚠️ updateDrawing 跳过:', { 
+        socket: !!socket, 
+        currentPath: !!currentPath, 
+        currentUser: !!currentUser,
+        currentUserId: currentUser?.id 
+      });
       return;
     }
 
@@ -234,7 +239,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       pathId: currentPath.id, 
       pointsCount: updatedPath.points.length,
       hasId: !!currentPath.id,
-      coords 
+      coords,
+      userId: currentUser.id
     });
 
     // 只有当路径有ID时才发送更新到服务器
@@ -248,7 +254,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     } else {
       console.log('⏳ 等待路径ID分配，暂不发送更新');
     }
-  }, [socket, currentPath]);
+  }, [socket, currentPath, currentUser]);
 
   // 处理鼠标移动（更新坐标显示）
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -300,7 +306,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
   // 处理鼠标按下
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    if (!socket) return;
+    if (!socket || !currentUser) {
+      console.log('⚠️ 无法开始绘画 - 未连接或用户未认证:', { socket: !!socket, currentUser: !!currentUser });
+      return;
+    }
     
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -317,7 +326,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       clientX: e.clientX,
       clientY: e.clientY,
       canvasX,
-      canvasY
+      canvasY,
+      currentUserId: currentUser.id
     });
 
     if (tool === 'pan' || e.button === 2 || e.ctrlKey || e.metaKey) {
@@ -328,7 +338,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     } else if (tool === 'pen' && e.button === 0) { // 确保是左键点击
       // 绘画模式
       const coords = getCanvasCoordinates(e.clientX, e.clientY);
-      console.log('开始绘画:', { coords, color, size, isDrawing });
+      console.log('开始绘画:', { coords, color, size, isDrawing, userId: currentUser.id });
       
       if (!isDrawing) { // 防止重复开始绘画
         setIsDrawing(true);
@@ -356,6 +366,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
             size: size
           }
         });
+        
+        console.log('📡 已发送绘画开始请求到服务器');
       }
     }
   }, [tool, color, size, getCanvasCoordinates, socket, currentUser, isDrawing]);

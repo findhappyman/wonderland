@@ -13,7 +13,7 @@ export const useSocket = (initialUser: User): UseSocketReturn => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(initialUser);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -33,6 +33,16 @@ export const useSocket = (initialUser: User): UseSocketReturn => {
       console.log('🔗 Connected to server:', serverUrl);
       setIsConnected(true);
       
+      // 确保socket.id存在才设置用户
+      if (newSocket.id) {
+        const userWithSocketId = {
+          ...initialUser,
+          id: newSocket.id
+        };
+        setCurrentUser(userWithSocketId);
+        console.log('👤 用户信息已设置:', userWithSocketId);
+      }
+      
       // Join the global room with username (server expects { roomId, username })
       newSocket.emit('join_room', {
         roomId: 'global',
@@ -43,28 +53,60 @@ export const useSocket = (initialUser: User): UseSocketReturn => {
     newSocket.on('disconnect', () => {
       console.log('❌ Disconnected from server');
       setIsConnected(false);
+      setCurrentUser(null);
     });
 
     // Room state event (server sends initial room data)
-    newSocket.on('room_state', (data: { users: User[], drawingPaths: any[] }) => {
+    newSocket.on('room_state', (data: { users: any[], drawingPaths: any[] }) => {
       console.log('🏠 Room state received:', data);
-      setUsers(data.users.filter(u => u.id !== newSocket.id));
-      // Update current user with server data if available
+      
+      // 转换服务器用户数据格式到客户端格式
+      const convertedUsers = data.users.map(serverUser => ({
+        id: serverUser.id,
+        name: serverUser.username,
+        color: serverUser.color
+      }));
+      
+      setUsers(convertedUsers.filter(u => u.id !== newSocket.id));
+      
+      // 更新当前用户信息
       const serverUser = data.users.find(u => u.id === newSocket.id);
       if (serverUser) {
-        setCurrentUser(serverUser);
+        const convertedCurrentUser = {
+          id: serverUser.id,
+          name: serverUser.username,
+          color: serverUser.color
+        };
+        setCurrentUser(convertedCurrentUser);
+        console.log('✅ 当前用户已同步:', convertedCurrentUser);
       }
     });
 
     // User management events
-    newSocket.on('user_joined', (data: { user: User, users: User[] }) => {
-      console.log('👋 User joined:', data.user.name);
-      setUsers(data.users.filter(u => u.id !== newSocket.id));
+    newSocket.on('user_joined', (data: { user: any, users: any[] }) => {
+      console.log('👋 User joined:', data.user.username);
+      
+      // 转换服务器用户数据格式
+      const convertedUsers = data.users.map(serverUser => ({
+        id: serverUser.id,
+        name: serverUser.username,
+        color: serverUser.color
+      }));
+      
+      setUsers(convertedUsers.filter(u => u.id !== newSocket.id));
     });
 
-    newSocket.on('user_left', (data: { userId: string, users: User[] }) => {
+    newSocket.on('user_left', (data: { userId: string, users: any[] }) => {
       console.log('👋 User left:', data.userId);
-      setUsers(data.users.filter(u => u.id !== newSocket.id));
+      
+      // 转换服务器用户数据格式
+      const convertedUsers = data.users.map(serverUser => ({
+        id: serverUser.id,
+        name: serverUser.username,
+        color: serverUser.color
+      }));
+      
+      setUsers(convertedUsers.filter(u => u.id !== newSocket.id));
     });
 
     // Error handling
