@@ -230,10 +230,10 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // 广播绘画结束
-      socket.to(roomId).emit('drawing_ended', { pathId });
+      // 广播绘画结束给所有用户（包括发起者自己）
+      io.to(roomId).emit('drawing_ended', { pathId });
       
-      console.log(`用户 ${currentUser.username} 结束绘画`);
+      console.log(`用户 ${currentUser.username} 结束绘画，路径ID: ${pathId}`);
     } catch (error) {
       console.error('结束绘画错误:', error);
     }

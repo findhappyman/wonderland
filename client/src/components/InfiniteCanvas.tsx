@@ -491,10 +491,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     });
 
     socket.on('drawing_ended', ({ pathId }) => {
-      console.log('收到绘画结束:', pathId);
+      console.log('收到绘画结束:', pathId, '当前路径ID:', currentPathId);
       
       // 如果是当前用户的路径结束，将当前路径移动到drawingPaths中
       if (pathId === currentPathId && currentPath) {
+        console.log('✅ 将当前路径移动到drawingPaths:', currentPath);
         setDrawingPaths(prev => [...prev, { ...currentPath, id: pathId }]);
         setCurrentPath(null);
         setCurrentPathId(null);
