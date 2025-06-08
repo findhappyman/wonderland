@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画布测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #000;
+            cursor: crosshair;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+        button {
+            margin-right: 10px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Canvas 绘画测试</h1>
+    <div class="controls">
+        <button onclick="setTool('pen')" id="penBtn">画笔</button>
+        <button onclick="clearCanvas()">清空</button>
+        <input type="color" id="colorPicker" value="#000000">
+        <input type="range" id="sizeRange" min="1" max="20" value="5">
+        <span id="sizeDisplay">5px</span>
+    </div>
+    
+    <canvas id="testCanvas" width="800" height="600"></canvas>
+    
+    <div style="margin-top: 10px;">
+        状态: <span id="status">就绪</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('testCanvas');
+        const ctx = canvas.getContext('2d');
+        const colorPicker = document.getElementById('colorPicker');
+        const sizeRange = document.getElementById('sizeRange');
+        const sizeDisplay = document.getElementById('sizeDisplay');
+        const status = document.getElementById('status');
+        
+        let isDrawing = false;
+        let lastPoint = null;
+        
+        sizeRange.addEventListener('input', () => {
+            sizeDisplay.textContent = sizeRange.value + 'px';
+        });
+        
+        function setTool(tool) {
+            if (tool === 'pen') {
+                canvas.style.cursor = 'crosshair';
+                document.getElementById('penBtn').style.background = '#007AFF';
+                document.getElementById('penBtn').style.color = 'white';
+            }
+        }
+        
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            status.textContent = '画布已清空';
+        }
+        
+        function drawPath(from, to) {
+            ctx.strokeStyle = colorPicker.value;
+            ctx.lineWidth = parseInt(sizeRange.value);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            ctx.beginPath();
+            ctx.moveTo(from.x, from.y);
+            ctx.lineTo(to.x, to.y);
+            ctx.stroke();
+        }
+        
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            lastPoint = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            status.textContent = '开始绘画';
+            
+            // 绘制起始点
+            ctx.strokeStyle = colorPicker.value;
+            ctx.lineWidth = parseInt(sizeRange.value);
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.arc(lastPoint.x, lastPoint.y, parseInt(sizeRange.value) / 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing || !lastPoint) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const currentPoint = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            
+            drawPath(lastPoint, currentPoint);
+            lastPoint = currentPoint;
+            status.textContent = '绘画中...';
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+            lastPoint = null;
+            status.textContent = '绘画完成';
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            isDrawing = false;
+            lastPoint = null;
+            status.textContent = '就绪';
+        });
+        
+        // 初始化
+        setTool('pen');
+        status.textContent = '就绪 - 点击并拖拽鼠标进行绘画';
+    </script>
+</body>
+</html> 

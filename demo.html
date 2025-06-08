@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无限画布 - 演示页面</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .subtitle {
+            font-size: 1.2em;
+            margin-bottom: 40px;
+            opacity: 0.9;
+        }
+        .demo-links {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 40px 0;
+        }
+        .demo-link {
+            background: rgba(255,255,255,0.2);
+            padding: 20px 30px;
+            border-radius: 12px;
+            text-decoration: none;
+            color: white;
+            font-weight: bold;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .demo-link:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+        .feature {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+        .feature h3 {
+            margin-top: 0;
+            font-size: 1.3em;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+        }
+        .status.online {
+            background: rgba(76, 175, 80, 0.3);
+        }
+        .status.offline {
+            background: rgba(244, 67, 54, 0.3);
+        }
+        .instructions {
+            text-align: left;
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+        .instructions h3 {
+            margin-top: 0;
+        }
+        .instructions ul {
+            margin: 10px 0;
+        }
+        .instructions li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 无限画布</h1>
+        <p class="subtitle">全球协作绘画平台 - 让全世界的人在同一个画布上创作</p>
+        
+        <div id="status" class="status">
+            <strong>检查服务状态中...</strong>
+        </div>
+
+        <div class="demo-links">
+            <a href="http://localhost:3002" class="demo-link" target="_blank">
+                🎨 打开画布应用
+            </a>
+            <a href="http://localhost:3001" class="demo-link" target="_blank">
+                📊 查看服务器状态
+            </a>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <h3>🎯 实时协作</h3>
+                <p>多人同时在线绘画，所有操作实时同步到全球用户</p>
+            </div>
+            <div class="feature">
+                <h3>🌍 无限画布</h3>
+                <p>支持无限缩放和平移，给你无限的创作空间</p>
+            </div>
+            <div class="feature">
+                <h3>👥 用户光标</h3>
+                <p>实时显示其他用户的光标位置和绘画状态</p>
+            </div>
+            <div class="feature">
+                <h3>🎨 丰富工具</h3>
+                <p>多种画笔工具、颜色选择和画笔大小调节</p>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>🎮 操作说明</h3>
+            <ul>
+                <li><strong>绘画:</strong> 鼠标左键拖拽</li>
+                <li><strong>移动画布:</strong> 鼠标右键拖拽 或 空格键+拖拽</li>
+                <li><strong>缩放:</strong> 鼠标滚轮</li>
+                <li><strong>选择工具:</strong> 使用左上角工具栏</li>
+                <li><strong>选择颜色:</strong> 点击颜色选择器或预设颜色</li>
+                <li><strong>调整画笔:</strong> 使用大小滑块</li>
+            </ul>
+        </div>
+
+        <div class="instructions">
+            <h3>🚀 快速开始</h3>
+            <p>如果服务还未启动，请在终端中运行：</p>
+            <pre style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; text-align: left;">
+# 启动服务器
+cd server && npm run dev
+
+# 启动客户端 (新终端窗口)
+cd client && npm run dev
+            </pre>
+            <p>或者直接运行启动脚本：</p>
+            <pre style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; text-align: left;">
+./start.sh
+            </pre>
+        </div>
+    </div>
+
+    <script>
+        // 检查服务状态
+        async function checkServices() {
+            const statusEl = document.getElementById('status');
+            
+            try {
+                // 检查服务器
+                const serverResponse = await fetch('http://localhost:3001');
+                const serverOk = serverResponse.ok;
+                
+                // 检查客户端
+                const clientResponse = await fetch('http://localhost:3002');
+                const clientOk = clientResponse.ok;
+                
+                if (serverOk && clientOk) {
+                    statusEl.className = 'status online';
+                    statusEl.innerHTML = '<strong>✅ 服务运行正常</strong><br>服务器和客户端都已启动';
+                } else if (serverOk) {
+                    statusEl.className = 'status offline';
+                    statusEl.innerHTML = '<strong>⚠️ 部分服务运行</strong><br>服务器已启动，客户端未启动';
+                } else if (clientOk) {
+                    statusEl.className = 'status offline';
+                    statusEl.innerHTML = '<strong>⚠️ 部分服务运行</strong><br>客户端已启动，服务器未启动';
+                } else {
+                    statusEl.className = 'status offline';
+                    statusEl.innerHTML = '<strong>❌ 服务未启动</strong><br>请先启动服务器和客户端';
+                }
+            } catch (error) {
+                statusEl.className = 'status offline';
+                statusEl.innerHTML = '<strong>❌ 无法连接到服务</strong><br>请检查服务是否已启动';
+            }
+        }
+
+        // 页面加载时检查服务状态
+        checkServices();
+        
+        // 每10秒检查一次服务状态
+        setInterval(checkServices, 10000);
+    </script>
+</body>
+</html> 
