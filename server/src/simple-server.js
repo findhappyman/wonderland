@@ -4,6 +4,8 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
+const fs = require('fs').promises;
+const path = require('path');
 
 const app = express();
 const server = createServer(app);
@@ -38,17 +40,132 @@ const io = new Server(server, {
   }
 });
 
+// 数据文件路径
+const DATA_DIR = path.join(__dirname, '../data');
+const USER_DATABASE_FILE = path.join(DATA_DIR, 'users.json');
+const ROOMS_DATABASE_FILE = path.join(DATA_DIR, 'rooms.json');
+
 // 存储房间数据
 const rooms = new Map();
 
 // 存储IP地址对应的用户信息
 const ipUserMap = new Map();
 
-// 存储用户账户数据（用户名+密码）
+// 存储用户账户数据（用户名作为主键）
 const userDatabase = new Map();
 
 // 密码哈希轮数
 const SALT_ROUNDS = 10;
+
+// 确保数据目录存在
+async function ensureDataDirectory() {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    console.log('📁 数据目录已就绪:', DATA_DIR);
+  } catch (error) {
+    console.error('❌ 创建数据目录失败:', error);
+  }
+}
+
+// 加载用户数据
+async function loadUserDatabase() {
+  try {
+    const data = await fs.readFile(USER_DATABASE_FILE, 'utf8');
+    const users = JSON.parse(data);
+    
+    for (const [username, userData] of Object.entries(users)) {
+      userDatabase.set(username, {
+        ...userData,
+        createdAt: new Date(userData.createdAt),
+        lastLogin: userData.lastLogin ? new Date(userData.lastLogin) : new Date()
+      });
+    }
+    
+    console.log(`📚 已加载 ${userDatabase.size} 个用户账户`);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.log('📚 用户数据文件不存在，将创建新文件');
+    } else {
+      console.error('❌ 加载用户数据失败:', error);
+    }
+  }
+}
+
+// 保存用户数据
+async function saveUserDatabase() {
+  try {
+    const users = {};
+    for (const [username, userData] of userDatabase.entries()) {
+      users[username] = {
+        ...userData,
+        createdAt: userData.createdAt.toISOString(),
+        lastLogin: userData.lastLogin.toISOString()
+      };
+    }
+    
+    await fs.writeFile(USER_DATABASE_FILE, JSON.stringify(users, null, 2));
+    console.log(`💾 已保存 ${userDatabase.size} 个用户账户`);
+  } catch (error) {
+    console.error('❌ 保存用户数据失败:', error);
+  }
+}
+
+// 加载房间数据
+async function loadRoomsDatabase() {
+  try {
+    const data = await fs.readFile(ROOMS_DATABASE_FILE, 'utf8');
+    const roomsData = JSON.parse(data);
+    
+    for (const [roomId, roomData] of Object.entries(roomsData)) {
+      rooms.set(roomId, {
+        ...roomData,
+        users: new Map(), // 在线用户列表在重启时清空
+        drawingPaths: roomData.drawingPaths.map(path => ({
+          ...path,
+          createdAt: new Date(path.createdAt)
+        })),
+        createdAt: new Date(roomData.createdAt)
+      });
+    }
+    
+    console.log(`🏠 已加载 ${rooms.size} 个房间，${Array.from(rooms.values()).reduce((sum, room) => sum + room.drawingPaths.length, 0)} 个绘画路径`);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.log('🏠 房间数据文件不存在，将创建新文件');
+    } else {
+      console.error('❌ 加载房间数据失败:', error);
+    }
+  }
+}
+
+// 保存房间数据
+async function saveRoomsDatabase() {
+  try {
+    const roomsData = {};
+    for (const [roomId, roomData] of rooms.entries()) {
+      roomsData[roomId] = {
+        id: roomData.id,
+        drawingPaths: roomData.drawingPaths.map(path => ({
+          ...path,
+          createdAt: path.createdAt.toISOString()
+        })),
+        createdAt: roomData.createdAt.toISOString()
+      };
+    }
+    
+    await fs.writeFile(ROOMS_DATABASE_FILE, JSON.stringify(roomsData, null, 2));
+    const totalPaths = Array.from(rooms.values()).reduce((sum, room) => sum + room.drawingPaths.length, 0);
+    console.log(`💾 已保存 ${rooms.size} 个房间，${totalPaths} 个绘画路径`);
+  } catch (error) {
+    console.error('❌ 保存房间数据失败:', error);
+  }
+}
+
+// 定期保存数据（每5分钟）
+setInterval(async () => {
+  await saveUserDatabase();
+  await saveRoomsDatabase();
+}, 5 * 60 * 1000);
 
 // 密码验证函数
 async function validatePassword(password) {
@@ -67,23 +184,24 @@ async function validatePassword(password) {
   return { valid: true };
 }
 
-// 创建或验证用户账户
-async function createOrValidateUser(userId, username, password) {
+// 创建或验证用户账户（以用户名为主键）
+async function createOrValidateUser(username, password, providedUserId) {
   try {
-    // 检查用户是否已存在
-    if (userDatabase.has(userId)) {
-      const existingUser = userDatabase.get(userId);
+    const normalizedUsername = username.toLowerCase();
+    
+    // 检查用户是否已存在（以用户名为主键）
+    if (userDatabase.has(normalizedUsername)) {
+      const existingUser = userDatabase.get(normalizedUsername);
       
       // 验证密码
       const passwordMatch = await bcrypt.compare(password, existingUser.passwordHash);
       if (!passwordMatch) {
-        return { success: false, message: '密码错误' };
+        return { success: false, message: '用户名或密码错误' };
       }
       
-      // 检查用户名是否匹配
-      if (existingUser.username !== username) {
-        return { success: false, message: '用户名与已注册的不匹配' };
-      }
+      // 更新最后登录时间
+      existingUser.lastLogin = new Date();
+      userDatabase.set(normalizedUsername, existingUser);
       
       return { 
         success: true, 
@@ -91,26 +209,21 @@ async function createOrValidateUser(userId, username, password) {
         isNewUser: false 
       };
     } else {
-      // 检查用户名是否被其他用户使用
-      for (const [existingUserId, existingUser] of userDatabase.entries()) {
-        if (existingUser.username.toLowerCase() === username.toLowerCase() && existingUserId !== userId) {
-          return { success: false, message: '用户名已被其他用户使用' };
-        }
-      }
-      
-      // 创建新用户
+      // 创建新用户（用户名作为唯一标识）
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
       const newUser = {
-        userId: userId,
-        username: username,
+        username: username, // 保持原始大小写
+        normalizedUsername: normalizedUsername,
+        providedUserId: providedUserId, // 记录用户提供的ID，但不作为主键
         passwordHash: passwordHash,
         color: generateRandomColor(),
         createdAt: new Date(),
         lastLogin: new Date()
       };
       
-      userDatabase.set(userId, newUser);
-      console.log(`🆕 创建新用户账户: ${userId} (${username})`);
+      userDatabase.set(normalizedUsername, newUser);
+      await saveUserDatabase(); // 立即保存新用户
+      console.log(`🆕 创建新用户账户: ${username} (ID: ${providedUserId})`);
       
       return { 
         success: true, 
@@ -266,7 +379,7 @@ io.on('connection', (socket) => {
 
       // 创建或验证用户账户
       const finalUserId = userId ? userId.trim() : socket.id;
-      const userValidation = await createOrValidateUser(finalUserId, username.trim(), password);
+      const userValidation = await createOrValidateUser(username.trim(), password, finalUserId);
       
       if (!userValidation.success) {
         socket.emit('error', { message: userValidation.message });
@@ -295,7 +408,7 @@ io.on('connection', (socket) => {
       
       // 检查用户是否已在房间中（防止重复登录）
       const existingRoomUser = Array.from(room.users.values()).find(
-        user => user.customId === finalUserId && user.id !== socket.id
+        user => user.normalizedUsername === userAccount.normalizedUsername && user.id !== socket.id
       );
       if (existingRoomUser) {
         socket.emit('error', { message: '该账户已在其他地方登录，请先退出或使用不同的账户' });
@@ -305,8 +418,9 @@ io.on('connection', (socket) => {
       // 创建用户对象（房间内的用户信息）
       currentUser = {
         id: socket.id,
-        customId: finalUserId,
-        username: userAccount.username,
+        username: userAccount.username, // 使用原始大小写的用户名
+        normalizedUsername: userAccount.normalizedUsername,
+        providedUserId: finalUserId,
         color: userAccount.color,
         ip: clientIP,
         isOnline: true,
@@ -315,15 +429,15 @@ io.on('connection', (socket) => {
 
       console.log(`👤 用户${isNewUser ? '注册并' : ''}登录成功:`, { 
         socketId: currentUser.id,
-        customId: currentUser.customId,
         username: currentUser.username, 
+        providedUserId: currentUser.providedUserId,
         color: currentUser.color,
         isNewUser: isNewUser
       });
 
       // 更新用户最后登录时间
       userAccount.lastLogin = new Date();
-      userDatabase.set(finalUserId, userAccount);
+      userDatabase.set(userAccount.normalizedUsername, userAccount);
 
       currentRoomId = roomId;
       
@@ -343,7 +457,6 @@ io.on('connection', (socket) => {
       console.log(`🏠 用户已加入房间:`, { 
         roomId, 
         userId: currentUser.id,
-        customId: currentUser.customId,
         username: currentUser.username,
         roomUsersCount: room.users.size,
         roomDrawingPathsCount: room.drawingPaths.length 
@@ -370,14 +483,13 @@ io.on('connection', (socket) => {
       
       console.log(`📡 通知其他用户有新用户加入:`, { 
         newUserId: currentUser.id,
-        newUserCustomId: currentUser.customId,
         newUsername: currentUser.username,
         totalUsers: userJoinedData.users.length 
       });
       
       socket.to(roomId).emit('user_joined', userJoinedData);
 
-      console.log(`✅ 用户 ${currentUser.username} (ID: ${currentUser.customId}, IP: ${clientIP}) 成功${isNewUser ? '注册并' : ''}加入房间 ${roomId}`);
+      console.log(`✅ 用户 ${currentUser.username} (IP: ${clientIP}) 成功${isNewUser ? '注册并' : ''}加入房间 ${roomId}`);
     } catch (error) {
       console.error('❌ 加入房间错误:', error);
       socket.emit('error', { message: '登录失败: ' + error.message });
@@ -385,7 +497,7 @@ io.on('connection', (socket) => {
   });
 
   // 开始绘画
-  socket.on('drawing_start', ({ roomId, path }) => {
+  socket.on('drawing_start', async ({ roomId, path }) => {
     try {
       console.log('🎨 收到绘画开始请求:', { roomId, pathPointsCount: path.points.length, userId: currentUser?.id });
       
@@ -415,6 +527,9 @@ io.on('connection', (socket) => {
       room.drawingPaths.push(drawingPath);
       console.log('✅ 绘画路径已创建:', { pathId: drawingPath.id, userId: drawingPath.userId, pointsCount: drawingPath.points.length });
 
+      // 立即保存到文件
+      await saveRoomsDatabase();
+
       // 广播给房间内所有用户（包括自己）
       console.log('📡 广播绘画开始事件到房间:', { roomId, usersCount: room.users.size });
       io.to(roomId).emit('drawing_started', { path: drawingPath });
@@ -427,7 +542,7 @@ io.on('connection', (socket) => {
   });
 
   // 更新绘画
-  socket.on('drawing_update', ({ roomId, pathId, points }) => {
+  socket.on('drawing_update', async ({ roomId, pathId, points }) => {
     try {
       if (!currentUser || currentRoomId !== roomId) {
         socket.emit('error', { message: '未授权的操作' });
@@ -459,11 +574,14 @@ io.on('connection', (socket) => {
   });
 
   // 结束绘画
-  socket.on('drawing_end', ({ roomId, pathId }) => {
+  socket.on('drawing_end', async ({ roomId, pathId }) => {
     try {
       if (!currentUser || currentRoomId !== roomId) {
         return;
       }
+
+      // 保存到文件
+      await saveRoomsDatabase();
 
       // 广播绘画结束给所有用户（包括发起者自己）
       io.to(roomId).emit('drawing_ended', { pathId });
@@ -493,7 +611,7 @@ io.on('connection', (socket) => {
   });
 
   // 删除用户的所有绘画
-  socket.on('clear_my_drawings', ({ roomId }) => {
+  socket.on('clear_my_drawings', async ({ roomId }) => {
     try {
       if (!currentUser || currentRoomId !== roomId) {
         socket.emit('error', { message: '未授权的操作' });
@@ -510,6 +628,9 @@ io.on('connection', (socket) => {
       const deletedPaths = room.drawingPaths.filter(p => p.userId === currentUser.id);
       room.drawingPaths = room.drawingPaths.filter(p => p.userId !== currentUser.id);
 
+      // 立即保存到文件
+      await saveRoomsDatabase();
+
       // 广播删除事件给所有用户
       io.to(roomId).emit('drawings_cleared', { 
         userId: currentUser.id,
@@ -524,7 +645,7 @@ io.on('connection', (socket) => {
   });
 
   // 更新用户名
-  socket.on('update_username', ({ username }) => {
+  socket.on('update_username', async ({ username }) => {
     try {
       if (!currentUser) {
         socket.emit('error', { message: '用户未连接' });
@@ -537,24 +658,49 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // 检查用户名是否已存在（排除当前用户）
+      const normalizedNewUsername = username.toLowerCase();
+      
+      // 检查新用户名是否已被其他用户使用
+      if (userDatabase.has(normalizedNewUsername) && normalizedNewUsername !== currentUser.normalizedUsername) {
+        socket.emit('error', { message: '用户名已被其他用户使用，请选择其他用户名' });
+        return;
+      }
+
+      // 检查房间内是否有其他用户使用相同用户名
       if (currentRoomId) {
         const room = rooms.get(currentRoomId);
         if (room) {
           const existingUser = Array.from(room.users.values()).find(
-            user => user.username.toLowerCase() === username.toLowerCase() && user.id !== socket.id
+            user => user.username.toLowerCase() === normalizedNewUsername && user.id !== socket.id
           );
           if (existingUser) {
-            socket.emit('error', { message: '用户名已存在，请选择其他用户名' });
+            socket.emit('error', { message: '房间内已有用户使用该用户名，请选择其他用户名' });
             return;
           }
         }
       }
 
       const oldUsername = currentUser.username;
+      const oldNormalizedUsername = currentUser.normalizedUsername;
       
-      // 更新用户名
+      // 更新数据库中的用户信息
+      if (userDatabase.has(oldNormalizedUsername)) {
+        const userAccount = userDatabase.get(oldNormalizedUsername);
+        userAccount.username = username.trim();
+        userAccount.normalizedUsername = normalizedNewUsername;
+        
+        // 如果用户名发生变化，需要更新数据库键
+        if (oldNormalizedUsername !== normalizedNewUsername) {
+          userDatabase.delete(oldNormalizedUsername);
+          userDatabase.set(normalizedNewUsername, userAccount);
+        }
+        
+        await saveUserDatabase();
+      }
+
+      // 更新当前用户信息
       currentUser.username = username.trim();
+      currentUser.normalizedUsername = normalizedNewUsername;
       ipUserMap.set(clientIP, currentUser);
 
       // 更新房间中的用户信息
@@ -586,7 +732,7 @@ io.on('connection', (socket) => {
   });
 
   // 用户断开连接
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log(`用户断开连接: ${socket.id}, IP: ${clientIP}`);
     
     if (currentUser && currentRoomId) {
@@ -600,9 +746,11 @@ io.on('connection', (socket) => {
           users: Array.from(room.users.values())
         });
 
-        // 如果房间为空，可以选择删除房间（可选）
+        // 如果房间为空，保留房间和绘画数据
         if (room.users.size === 0) {
           console.log(`房间 ${currentRoomId} 已空，保留绘画数据`);
+          // 保存房间数据
+          await saveRoomsDatabase();
         }
       }
       
@@ -624,7 +772,9 @@ app.get('/health', (req, res) => {
     status: 'ok', 
     timestamp: new Date().toISOString(),
     rooms: rooms.size,
-    totalUsers: Array.from(rooms.values()).reduce((sum, room) => sum + room.users.size, 0)
+    totalUsers: Array.from(rooms.values()).reduce((sum, room) => sum + room.users.size, 0),
+    registeredUsers: userDatabase.size,
+    totalDrawings: Array.from(rooms.values()).reduce((sum, room) => sum + room.drawingPaths.length, 0)
   });
 });
 
@@ -645,13 +795,51 @@ app.get('/api/rooms/:roomId', (req, res) => {
   });
 });
 
+// 优雅关闭处理
+process.on('SIGINT', async () => {
+  console.log('\n🛑 收到关闭信号，正在保存数据...');
+  await saveUserDatabase();
+  await saveRoomsDatabase();
+  console.log('💾 数据保存完成，服务器关闭');
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 收到终止信号，正在保存数据...');
+  await saveUserDatabase();
+  await saveRoomsDatabase();
+  console.log('💾 数据保存完成，服务器关闭');
+  process.exit(0);
+});
+
 const PORT = process.env.PORT || 8080;
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
-  console.log(`📊 健康检查: http://localhost:${PORT}/health`);
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`🌐 局域网访问: http://192.168.100.171:${PORT}`);
+// 启动服务器
+async function startServer() {
+  try {
+    // 确保数据目录存在
+    await ensureDataDirectory();
+    
+    // 加载数据
+    await loadUserDatabase();
+    await loadRoomsDatabase();
+    
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+      console.log(`📊 健康检查: http://localhost:${PORT}/health`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🌐 局域网访问: http://192.168.100.171:${PORT}`);
+      }
+      console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`📚 已注册用户: ${userDatabase.size}`);
+      console.log(`🏠 已保存房间: ${rooms.size}`);
+      const totalDrawings = Array.from(rooms.values()).reduce((sum, room) => sum + room.drawingPaths.length, 0);
+      console.log(`🎨 已保存绘画: ${totalDrawings}`);
+    });
+  } catch (error) {
+    console.error('❌ 服务器启动失败:', error);
+    process.exit(1);
   }
-  console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
-}); 
+}
+
+startServer(); 
