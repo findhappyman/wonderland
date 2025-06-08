@@ -55,21 +55,12 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
   // 滚动到坐标显示区域
   const scrollToCoordinates = () => {
-    if (coordinatesRef.current) {
-      coordinatesRef.current.scrollIntoView({ 
+    if (scrollContainerRef.current) {
+      const coordinatesElement = scrollContainerRef.current.querySelector('[data-coordinates]');
+      coordinatesElement?.scrollIntoView({ 
         behavior: 'smooth', 
         block: 'end',
         inline: 'nearest'
-      });
-    }
-  };
-
-  // 滚动到底部
-  const scrollToBottom = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollContainerRef.current.scrollHeight,
-        behavior: 'smooth'
       });
     }
   };
@@ -540,7 +531,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         fontFamily: 'monospace',
                         border: '1px solid #e0e0e0'
                       }}>
-                        当前位置: ({Math.round(currentCoordinates.x)}, {Math.round(currentCoordinates.y)})
+                        当前位置: ({Math.round(currentCoordinates?.x || 0)}, {Math.round(currentCoordinates?.y || 0)})
                       </div>
                     )}
                     {/* 移动端滚动提示 */}
