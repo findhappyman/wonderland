@@ -384,14 +384,28 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     }
     
     if (isDrawing && currentPath && socket) {
+      console.log('🏁 结束绘画:', { 
+        pathId: currentPath.id, 
+        hasId: !!currentPath.id,
+        pointsCount: currentPath.points.length 
+      });
+      
       // 完成当前路径 - 只有当路径有ID时才发送结束事件
       if (currentPath.id) {
+        console.log('📡 发送drawing_end事件:', currentPath.id);
         socket.emit('drawing_end', {
           roomId: 'global',
           pathId: currentPath.id
         });
+        
+        // 立即将当前路径移动到drawingPaths中，不等待服务器响应
+        console.log('✅ 立即保存路径到drawingPaths:', currentPath);
+        setDrawingPaths(prev => [...prev, currentPath]);
+      } else {
+        console.log('⚠️ 路径没有ID，无法发送结束事件');
       }
       
+      // 清空当前绘画状态
       setCurrentPath(null);
       setCurrentPathId(null);
       setIsDrawing(false);
@@ -493,12 +507,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     socket.on('drawing_ended', ({ pathId }) => {
       console.log('收到绘画结束:', pathId, '当前路径ID:', currentPathId);
       
-      // 如果是当前用户的路径结束，将当前路径移动到drawingPaths中
-      if (pathId === currentPathId && currentPath) {
-        console.log('✅ 将当前路径移动到drawingPaths:', currentPath);
-        setDrawingPaths(prev => [...prev, { ...currentPath, id: pathId }]);
-        setCurrentPath(null);
-        setCurrentPathId(null);
+      // 这个事件主要用于通知其他用户某个路径已完成
+      // 当前用户的路径已经在handleMouseUp中立即保存了
+      // 这里只需要清理状态（如果是当前用户的路径）
+      if (pathId === currentPathId) {
+        console.log('✅ 确认当前用户路径已完成:', pathId);
+        // 状态已经在handleMouseUp中清理了，这里不需要额外操作
+      } else {
+        console.log('📝 其他用户完成绘画:', pathId);
       }
     });
 
