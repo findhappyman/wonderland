@@ -3,7 +3,7 @@ import InfiniteCanvas from './components/InfiniteCanvas';
 import UnifiedPanel from './components/UnifiedPanel';
 import { CanvasState, User } from './types';
 import { useSocket } from './hooks/useSocket';
-import { generateUserId, generateUserName, generateUserColor, generateRandomInitialPosition } from './utils/user';
+import { generateRandomInitialPosition } from './utils/user';
 
 const App: React.FC = () => {
   const canvasRef = useRef<{ clearMyDrawings: () => void }>(null);
@@ -18,13 +18,14 @@ const App: React.FC = () => {
     currentCoordinates: { x: 0, y: 0 }
   });
 
-  const [currentUser] = useState<User>(() => ({
-    id: generateUserId(),
-    name: generateUserName(),
-    color: generateUserColor()
-  }));
+  // 服务器会基于IP自动分配用户身份，这里只需要一个临时的占位用户
+  const placeholderUser: User = {
+    id: 'temp',
+    name: '连接中...',
+    color: '#999999'
+  };
 
-  const { socket, users, isConnected, currentUser: syncedUser } = useSocket(currentUser);
+  const { socket, users, isConnected, currentUser } = useSocket();
 
   const handleCanvasStateChange = (newState: Partial<CanvasState>) => {
     setCanvasState(prev => ({ ...prev, ...newState }));
@@ -42,6 +43,12 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateUsername = (newUsername: string) => {
+    if (socket && isConnected) {
+      socket.emit('update_username', { username: newUsername });
+    }
+  };
+
   return (
     <div className="app" style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <InfiniteCanvas 
@@ -49,7 +56,7 @@ const App: React.FC = () => {
         canvasState={canvasState}
         onStateChange={handleCanvasStateChange}
         socket={socket}
-        currentUser={syncedUser || currentUser}
+        currentUser={currentUser || placeholderUser}
         users={users}
       />
       <UnifiedPanel
@@ -57,7 +64,8 @@ const App: React.FC = () => {
         onStateChange={handleCanvasStateChange}
         onClearCanvas={handleClearCanvas}
         onRandomTeleport={handleRandomTeleport}
-        currentUser={syncedUser || currentUser}
+        onUpdateUsername={handleUpdateUsername}
+        currentUser={currentUser || placeholderUser}
         users={users}
         isConnected={isConnected}
       />

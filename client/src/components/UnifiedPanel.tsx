@@ -6,6 +6,7 @@ interface UnifiedPanelProps {
   onStateChange: (newState: Partial<CanvasState>) => void;
   onClearCanvas?: () => void;
   onRandomTeleport?: () => void;
+  onUpdateUsername?: (newUsername: string) => void;
   currentUser: User;
   users: User[];
   isConnected: boolean;
@@ -16,12 +17,15 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
   onStateChange,
   onClearCanvas,
   onRandomTeleport,
+  onUpdateUsername,
   currentUser,
   users,
   isConnected
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'tools' | 'users'>('tools');
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [editingUsername, setEditingUsername] = useState('');
 
   const { tool, color, size, zoom, showCoordinates, currentCoordinates } = canvasState;
 
@@ -73,6 +77,37 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
   const resetView = () => {
     onStateChange({ zoom: 1, offset: { x: 0, y: 0 } });
+  };
+
+  // 开始编辑用户名
+  const startEditingUsername = () => {
+    setEditingUsername(currentUser.name);
+    setIsEditingUsername(true);
+  };
+
+  // 保存用户名
+  const saveUsername = () => {
+    const trimmedUsername = editingUsername.trim();
+    if (trimmedUsername && trimmedUsername !== currentUser.name && onUpdateUsername) {
+      onUpdateUsername(trimmedUsername);
+    }
+    setIsEditingUsername(false);
+    setEditingUsername('');
+  };
+
+  // 取消编辑
+  const cancelEditingUsername = () => {
+    setIsEditingUsername(false);
+    setEditingUsername('');
+  };
+
+  // 处理键盘事件
+  const handleUsernameKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      saveUsername();
+    } else if (e.key === 'Escape') {
+      cancelEditingUsername();
+    }
   };
 
   return (
@@ -597,22 +632,116 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '12px'
+                        gap: '12px',
+                        justifyContent: 'space-between'
                       }}>
                         <div style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '50%',
-                          backgroundColor: currentUser.color
-                        }} />
-                        <span style={{
-                          fontSize: '16px',
-                          fontWeight: 'bold',
-                          color: '#333'
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          flex: 1
                         }}>
-                          {currentUser.name}
-                        </span>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: currentUser.color
+                          }} />
+                          {isEditingUsername ? (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              flex: 1
+                            }}>
+                              <input
+                                type="text"
+                                value={editingUsername}
+                                onChange={(e) => setEditingUsername(e.target.value)}
+                                onKeyDown={handleUsernameKeyPress}
+                                onBlur={saveUsername}
+                                autoFocus
+                                maxLength={20}
+                                style={{
+                                  flex: 1,
+                                  padding: '6px 8px',
+                                  border: '1px solid #007AFF',
+                                  borderRadius: '6px',
+                                  fontSize: '14px',
+                                  outline: 'none'
+                                }}
+                                placeholder="输入新用户名"
+                              />
+                              <button
+                                onClick={saveUsername}
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#34C759',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ✓
+                              </button>
+                              <button
+                                onClick={cancelEditingUsername}
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#FF3B30',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{
+                              fontSize: '16px',
+                              fontWeight: 'bold',
+                              color: '#333',
+                              flex: 1
+                            }}>
+                              {currentUser.name}
+                            </span>
+                          )}
+                        </div>
+                        {!isEditingUsername && (
+                          <button
+                            onClick={startEditingUsername}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#007AFF',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            ✏️ 编辑
+                          </button>
+                        )}
                       </div>
+                      {isEditingUsername && (
+                        <div style={{
+                          marginTop: '8px',
+                          fontSize: '12px',
+                          color: '#666',
+                          fontStyle: 'italic'
+                        }}>
+                          💡 按回车保存，按ESC取消
+                        </div>
+                      )}
                     </div>
                   </div>
 

@@ -9,7 +9,7 @@ interface UseSocketReturn {
   currentUser: User | null;
 }
 
-export const useSocket = (initialUser: User): UseSocketReturn => {
+export const useSocket = (): UseSocketReturn => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -40,22 +40,8 @@ export const useSocket = (initialUser: User): UseSocketReturn => {
       console.log('🔗 Connected to server:', serverUrl, 'Socket ID:', newSocket.id);
       setIsConnected(true);
       
-      // 确保socket.id存在才设置用户
-      if (newSocket.id) {
-        const userWithSocketId = {
-          ...initialUser,
-          id: newSocket.id
-        };
-        setCurrentUser(userWithSocketId);
-        console.log('👤 用户信息已设置:', userWithSocketId);
-        
-        // Join the global room with username (server expects { roomId, username })
-        console.log('📡 发送join_room事件:', { roomId: 'global', username: initialUser.name });
-        newSocket.emit('join_room', {
-          roomId: 'global',
-          username: initialUser.name
-        });
-      }
+      // 服务器会自动基于IP分配用户身份，不需要手动加入房间
+      console.log('⏳ 等待服务器分配用户身份...');
     });
 
     newSocket.on('disconnect', () => {
@@ -65,83 +51,96 @@ export const useSocket = (initialUser: User): UseSocketReturn => {
       setUsers([]);
     });
 
-    // Room state event (server sends initial room data)
-    newSocket.on('room_state', (data: { users: any[], drawingPaths: any[] }) => {
-      console.log('🏠 Room state received:', data);
-      console.log('📊 用户数据:', data.users);
+    // 房间状态更新
+    newSocket.on('room_state', ({ users: roomUsers, drawingPaths }) => {
+      console.log('📊 收到房间状态:', { usersCount: roomUsers.length, pathsCount: drawingPaths.length });
       
-      // 转换服务器用户数据格式到客户端格式
-      const convertedUsers = data.users.map(serverUser => ({
-        id: serverUser.id,
-        name: serverUser.username,
-        color: serverUser.color
+      // 转换用户数据格式
+      const convertedUsers = roomUsers.map((user: any) => ({
+        id: user.id,
+        name: user.username,
+        color: user.color
       }));
       
-      console.log('🔄 转换后的用户数据:', convertedUsers);
-      
-      // 过滤掉当前用户，只保留其他用户
-      const otherUsers = convertedUsers.filter(u => u.id !== newSocket.id);
-      console.log('👥 其他用户列表:', otherUsers);
-      setUsers(otherUsers);
-      
-      // 更新当前用户信息
-      const serverUser = data.users.find(u => u.id === newSocket.id);
-      if (serverUser) {
-        const convertedCurrentUser = {
-          id: serverUser.id,
-          name: serverUser.username,
-          color: serverUser.color
-        };
-        setCurrentUser(convertedCurrentUser);
-        console.log('✅ 当前用户已同步:', convertedCurrentUser);
+      // 找到当前用户
+      const currentUserData = convertedUsers.find((user: User) => user.id === newSocket.id);
+      if (currentUserData) {
+        setCurrentUser(currentUserData);
+        console.log('👤 当前用户信息已设置:', currentUserData);
       }
+      
+      // 设置其他用户列表（不包含当前用户）
+      const otherUsers = convertedUsers.filter((user: User) => user.id !== newSocket.id);
+      setUsers(otherUsers);
+      console.log('👥 其他用户列表已更新:', otherUsers);
     });
 
-    // User management events
-    newSocket.on('user_joined', (data: { user: any, users: any[] }) => {
-      console.log('👋 User joined event received:', data);
-      console.log('📊 新的用户列表:', data.users);
+    // 用户加入
+    newSocket.on('user_joined', ({ user, users: roomUsers }) => {
+      console.log('👋 用户加入:', user);
       
-      // 转换服务器用户数据格式
-      const convertedUsers = data.users.map(serverUser => ({
-        id: serverUser.id,
-        name: serverUser.username,
-        color: serverUser.color
+      const convertedUsers = roomUsers.map((user: any) => ({
+        id: user.id,
+        name: user.username,
+        color: user.color
       }));
       
-      console.log('🔄 转换后的用户数据:', convertedUsers);
-      
-      // 过滤掉当前用户，只保留其他用户
-      const otherUsers = convertedUsers.filter(u => u.id !== newSocket.id);
-      console.log('👥 更新后的其他用户列表:', otherUsers);
+      // 更新用户列表（不包含当前用户）
+      const otherUsers = convertedUsers.filter((user: User) => user.id !== newSocket.id);
       setUsers(otherUsers);
     });
 
-    newSocket.on('user_left', (data: { userId: string, users: any[] }) => {
-      console.log('👋 User left event received:', data);
-      console.log('📊 剩余用户列表:', data.users);
+    // 用户离开
+    newSocket.on('user_left', ({ userId, users: roomUsers }) => {
+      console.log('👋 用户离开:', userId);
       
-      // 转换服务器用户数据格式
-      const convertedUsers = data.users.map(serverUser => ({
-        id: serverUser.id,
-        name: serverUser.username,
-        color: serverUser.color
+      const convertedUsers = roomUsers.map((user: any) => ({
+        id: user.id,
+        name: user.username,
+        color: user.color
       }));
       
-      console.log('🔄 转换后的用户数据:', convertedUsers);
-      
-      // 过滤掉当前用户，只保留其他用户
-      const otherUsers = convertedUsers.filter(u => u.id !== newSocket.id);
-      console.log('👥 更新后的其他用户列表:', otherUsers);
+      // 更新用户列表（不包含当前用户）
+      const otherUsers = convertedUsers.filter((user: User) => user.id !== newSocket.id);
       setUsers(otherUsers);
     });
 
-    // Error handling
-    newSocket.on('error', (error: { message: string }) => {
-      console.error('❌ Socket error:', error.message);
+    // 用户信息更新
+    newSocket.on('user_updated', ({ userId, username, users: roomUsers }) => {
+      console.log('🔄 用户信息更新:', { userId, username });
+      
+      const convertedUsers = roomUsers.map((user: any) => ({
+        id: user.id,
+        name: user.username,
+        color: user.color
+      }));
+      
+      // 如果是当前用户，更新当前用户信息
+      if (userId === newSocket.id) {
+        const updatedCurrentUser = convertedUsers.find((user: User) => user.id === newSocket.id);
+        if (updatedCurrentUser) {
+          setCurrentUser(updatedCurrentUser);
+          console.log('👤 当前用户信息已更新:', updatedCurrentUser);
+        }
+      }
+      
+      // 更新用户列表（不包含当前用户）
+      const otherUsers = convertedUsers.filter((user: User) => user.id !== newSocket.id);
+      setUsers(otherUsers);
     });
 
-    // 添加通用事件监听器来调试
+    // 用户名更新确认
+    newSocket.on('username_updated', ({ username, oldUsername }) => {
+      console.log('✅ 用户名更新成功:', { oldUsername, newUsername: username });
+    });
+
+    // 错误处理
+    newSocket.on('error', ({ message }) => {
+      console.error('❌ Socket错误:', message);
+      alert(`错误: ${message}`);
+    });
+
+    // 通用事件监听器（用于调试）
     newSocket.onAny((eventName, ...args) => {
       console.log('📡 收到Socket事件:', eventName, args);
     });
@@ -153,7 +152,7 @@ export const useSocket = (initialUser: User): UseSocketReturn => {
         socketRef.current.disconnect();
       }
     };
-  }, [initialUser]); // 恢复依赖项，但有初始化保护
+  }, []); // 移除依赖项，只初始化一次
 
   return {
     socket,
