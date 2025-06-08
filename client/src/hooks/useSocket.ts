@@ -16,6 +16,7 @@ export const useSocket = (): UseSocketReturn => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const initializedRef = useRef(false);
+  const roomStateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // 避免重复初始化
@@ -23,7 +24,7 @@ export const useSocket = (): UseSocketReturn => {
     initializedRef.current = true;
     
     // 获取服务器URL，支持环境变量配置
-    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3003';
+    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
     
     console.log('🔄 初始化Socket连接到:', serverUrl);
     
@@ -42,6 +43,14 @@ export const useSocket = (): UseSocketReturn => {
       
       // 服务器会自动基于IP分配用户身份，不需要手动加入房间
       console.log('⏳ 等待服务器分配用户身份...');
+      
+      // 设置超时检查
+      roomStateTimeoutRef.current = setTimeout(() => {
+        if (!currentUser) {
+          console.error('❌ 10秒内未收到服务器用户身份，可能存在连接问题');
+          alert('连接超时：未能获取用户身份，请刷新页面重试');
+        }
+      }, 10000); // 10秒超时
     });
 
     newSocket.on('disconnect', () => {
@@ -49,11 +58,23 @@ export const useSocket = (): UseSocketReturn => {
       setIsConnected(false);
       setCurrentUser(null);
       setUsers([]);
+      
+      // 清除超时定时器
+      if (roomStateTimeoutRef.current) {
+        clearTimeout(roomStateTimeoutRef.current);
+        roomStateTimeoutRef.current = null;
+      }
     });
 
     // 房间状态更新
     newSocket.on('room_state', ({ users: roomUsers, drawingPaths }) => {
       console.log('📊 收到房间状态:', { usersCount: roomUsers.length, pathsCount: drawingPaths.length });
+      
+      // 清除超时定时器，因为已经收到房间状态
+      if (roomStateTimeoutRef.current) {
+        clearTimeout(roomStateTimeoutRef.current);
+        roomStateTimeoutRef.current = null;
+      }
       
       // 转换用户数据格式
       const convertedUsers = roomUsers.map((user: any) => ({
@@ -67,6 +88,13 @@ export const useSocket = (): UseSocketReturn => {
       if (currentUserData) {
         setCurrentUser(currentUserData);
         console.log('👤 当前用户信息已设置:', currentUserData);
+      } else {
+        console.error('❌ 未在房间用户列表中找到当前用户');
+        console.log('🔍 调试信息:', { 
+          socketId: newSocket.id, 
+          roomUsers: convertedUsers,
+          roomUsersIds: convertedUsers.map(u => u.id)
+        });
       }
       
       // 设置其他用户列表（不包含当前用户）
@@ -150,6 +178,12 @@ export const useSocket = (): UseSocketReturn => {
       console.log('🧹 清理Socket连接');
       if (socketRef.current) {
         socketRef.current.disconnect();
+      }
+      
+      // 清除超时定时器
+      if (roomStateTimeoutRef.current) {
+        clearTimeout(roomStateTimeoutRef.current);
+        roomStateTimeoutRef.current = null;
       }
     };
   }, []); // 移除依赖项，只初始化一次

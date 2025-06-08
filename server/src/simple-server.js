@@ -154,10 +154,16 @@ function isUsernameExists(roomId, username) {
 
 io.on('connection', (socket) => {
   const clientIP = getClientIP(socket);
-  console.log(`用户连接: ${socket.id}, IP: ${clientIP}`);
+  console.log(`🔗 用户连接: ${socket.id}, IP: ${clientIP}`);
   
   // 根据IP获取或创建用户
   const userByIP = getOrCreateUserByIP(clientIP, socket.id);
+  console.log(`👤 用户信息已准备:`, { 
+    socketId: socket.id, 
+    ip: clientIP, 
+    username: userByIP.username, 
+    color: userByIP.color 
+  });
   
   let currentUser = null;
   let currentRoomId = null;
@@ -165,8 +171,11 @@ io.on('connection', (socket) => {
   // 自动加入全局房间
   const autoJoinRoom = (roomId = 'global') => {
     try {
+      console.log(`🚪 开始自动加入房间: ${roomId}, Socket: ${socket.id}`);
+      
       // 如果用户已经在其他房间，先离开
       if (currentRoomId && currentUser) {
+        console.log(`🚪 离开旧房间: ${currentRoomId}`);
         socket.leave(currentRoomId);
         const oldRoom = rooms.get(currentRoomId);
         if (oldRoom) {
@@ -183,6 +192,13 @@ io.on('connection', (socket) => {
         ...userByIP,
         joinedAt: new Date()
       };
+      
+      console.log(`👤 当前用户设置完成:`, { 
+        id: currentUser.id, 
+        username: currentUser.username, 
+        color: currentUser.color,
+        ip: currentUser.ip 
+      });
 
       currentRoomId = roomId;
       const room = getOrCreateRoom(roomId);
@@ -199,28 +215,61 @@ io.on('connection', (socket) => {
       // 加入房间
       socket.join(roomId);
       room.users.set(currentUser.id, currentUser);
+      
+      console.log(`🏠 用户已加入房间:`, { 
+        roomId, 
+        userId: currentUser.id, 
+        roomUsersCount: room.users.size,
+        roomDrawingPathsCount: room.drawingPaths.length 
+      });
 
       // 发送房间状态给新用户
-      socket.emit('room_state', {
+      const roomState = {
         users: Array.from(room.users.values()),
         drawingPaths: room.drawingPaths
+      };
+      
+      console.log(`📤 发送房间状态给用户 ${socket.id}:`, { 
+        usersCount: roomState.users.length, 
+        pathsCount: roomState.drawingPaths.length 
       });
+      
+      socket.emit('room_state', roomState);
 
       // 通知其他用户
-      socket.to(roomId).emit('user_joined', {
+      const userJoinedData = {
         user: currentUser,
         users: Array.from(room.users.values())
+      };
+      
+      console.log(`📡 通知其他用户有新用户加入:`, { 
+        newUserId: currentUser.id, 
+        totalUsers: userJoinedData.users.length 
       });
+      
+      socket.to(roomId).emit('user_joined', userJoinedData);
 
-      console.log(`用户 ${currentUser.username} (IP: ${clientIP}) 加入房间 ${roomId}`);
+      console.log(`✅ 用户 ${currentUser.username} (IP: ${clientIP}) 成功加入房间 ${roomId}`);
     } catch (error) {
-      console.error('自动加入房间错误:', error);
-      socket.emit('error', { message: '加入房间失败' });
+      console.error('❌ 自动加入房间错误:', error);
+      socket.emit('error', { message: '加入房间失败: ' + error.message });
     }
   };
 
-  // 自动加入全局房间
-  autoJoinRoom();
+  // 立即尝试自动加入全局房间
+  console.log(`🎯 开始为 ${socket.id} 执行自动加入房间...`);
+  
+  // 使用 setTimeout 确保在下一个事件循环中执行，避免潜在的竞态条件
+  setTimeout(() => {
+    try {
+      autoJoinRoom();
+      console.log(`✅ ${socket.id} 自动加入房间完成`);
+    } catch (error) {
+      console.error(`❌ ${socket.id} 自动加入房间失败:`, error);
+      // 发送错误事件给客户端
+      socket.emit('error', { message: '自动加入房间失败，请刷新页面重试' });
+    }
+  }, 100); // 延迟100ms执行
 
   // 用户加入房间（保留原有接口，但现在主要用于切换房间）
   socket.on('join_room', ({ roomId, username }) => {
@@ -515,7 +564,7 @@ app.get('/api/rooms/:roomId', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3003;
+const PORT = process.env.PORT || 8080;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
