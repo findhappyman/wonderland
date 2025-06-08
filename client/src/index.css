@@ -149,4 +149,36 @@ code {
     -webkit-overflow-scrolling: touch;
     transform: translateZ(0);
   }
+  
+  /* 移动端滚动容器优化 */
+  div[style*="overflowY: auto"] {
+    -webkit-overflow-scrolling: touch !important;
+    overflow-scrolling: touch !important;
+    transform: translateZ(0);
+    will-change: scroll-position;
+  }
+  
+  /* 防止移动端橡皮筋效果干扰 */
+  body {
+    position: fixed !important;
+    overflow: hidden !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  
+  /* 确保面板内容可以滚动 */
+  .panel-content {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+  }
+  
+  /* 移动端视口高度修复 */
+  .mobile-panel {
+    height: 100vh;
+    height: 100dvh; /* 动态视口高度 */
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
 }

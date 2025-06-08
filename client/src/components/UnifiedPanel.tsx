@@ -49,6 +49,31 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     };
   }, [isExpanded]);
 
+  // 滚动到底部的引用
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const coordinatesRef = React.useRef<HTMLDivElement>(null);
+
+  // 滚动到坐标显示区域
+  const scrollToCoordinates = () => {
+    if (coordinatesRef.current) {
+      coordinatesRef.current.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'end',
+        inline: 'nearest'
+      });
+    }
+  };
+
+  // 滚动到底部
+  const scrollToBottom = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   const presetColors = [
     '#000000', '#FF0000', '#00FF00', '#0000FF', 
     '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500',
@@ -250,22 +275,58 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             </div>
 
             {/* 内容区域 - 修复移动端滚动 */}
-            <div style={{
-              flex: 1,
-              padding: '20px',
-              overflowY: 'auto',
-              overflowX: 'hidden',
-              WebkitOverflowScrolling: 'touch', // iOS 平滑滚动
-              scrollbarWidth: 'thin', // Firefox 细滚动条
-              minHeight: 0 // 确保 flex 子元素可以滚动
-            }}>
+            <div 
+              ref={scrollContainerRef}
+              style={{
+                flex: 1,
+                padding: '20px',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch', // iOS 平滑滚动
+                scrollbarWidth: 'thin', // Firefox 细滚动条
+                minHeight: 0, // 确保 flex 子元素可以滚动
+                maxHeight: 'calc(100vh - 140px)', // 限制最大高度，为头部和标签预留空间
+                position: 'relative'
+              }}>
               {activeTab === 'tools' && (
                 <div style={{ 
                   display: 'flex', 
                   flexDirection: 'column', 
                   gap: '24px',
-                  paddingBottom: isMobile ? '60px' : '20px' // 移动端底部额外间距
+                  paddingBottom: isMobile ? '120px' : '40px', // 移动端增加更多底部间距
+                  minHeight: isMobile ? 'calc(100vh - 200px)' : 'auto' // 移动端确保最小高度
                 }}>
+                  {/* 移动端快速滚动按钮 */}
+                  {isMobile && (
+                    <div style={{
+                      position: 'sticky',
+                      top: '0',
+                      zIndex: 10,
+                      background: 'white',
+                      padding: '12px 0',
+                      borderBottom: '1px solid #e0e0e0',
+                      marginBottom: '12px'
+                    }}>
+                      <button
+                        onClick={scrollToCoordinates}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          border: '2px solid #007AFF',
+                          borderRadius: '12px',
+                          background: '#f0f8ff',
+                          color: '#007AFF',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 'bold',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        📍 快速跳转到坐标显示
+                      </button>
+                    </div>
+                  )}
+
                   {/* 工具选择 */}
                   <div>
                     <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#333' }}>
@@ -437,18 +498,22 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                   </div>
 
                   {/* 坐标显示 - 确保在移动端可见 */}
-                  <div style={{
-                    padding: '16px',
-                    background: '#f8f9fa',
-                    borderRadius: '12px',
-                    border: '2px solid #e0e0e0'
-                  }}>
+                  <div 
+                    ref={coordinatesRef}
+                    style={{
+                      padding: '20px',
+                      background: '#f8f9fa',
+                      borderRadius: '16px',
+                      border: '3px solid #007AFF',
+                      marginBottom: isMobile ? '20px' : '0', // 移动端额外底部间距
+                      boxShadow: '0 4px 12px rgba(0, 122, 255, 0.15)' // 添加阴影增强可见性
+                    }}>
                     <label style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '12px',
+                      gap: '16px',
                       cursor: 'pointer',
-                      fontSize: '16px',
+                      fontSize: '18px',
                       color: '#333',
                       fontWeight: 'bold'
                     }}>
@@ -457,20 +522,37 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         checked={showCoordinates || false}
                         onChange={(e) => onStateChange({ showCoordinates: e.target.checked })}
                         style={{ 
-                          transform: 'scale(1.5)',
-                          accentColor: '#007AFF'
+                          transform: 'scale(2)',
+                          accentColor: '#007AFF',
+                          marginRight: '8px'
                         }}
                       />
                       📍 显示坐标信息
                     </label>
                     {showCoordinates && (
                       <div style={{
-                        marginTop: '8px',
-                        fontSize: '12px',
+                        marginTop: '12px',
+                        padding: '12px',
+                        background: 'white',
+                        borderRadius: '8px',
+                        fontSize: '14px',
                         color: '#666',
-                        fontFamily: 'monospace'
+                        fontFamily: 'monospace',
+                        border: '1px solid #e0e0e0'
                       }}>
                         当前位置: ({Math.round(currentCoordinates.x)}, {Math.round(currentCoordinates.y)})
+                      </div>
+                    )}
+                    {/* 移动端滚动提示 */}
+                    {isMobile && (
+                      <div style={{
+                        marginTop: '12px',
+                        fontSize: '12px',
+                        color: '#999',
+                        textAlign: 'center',
+                        fontStyle: 'italic'
+                      }}>
+                        ✅ 已滚动到底部
                       </div>
                     )}
                   </div>
@@ -482,7 +564,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                   display: 'flex', 
                   flexDirection: 'column', 
                   gap: '16px',
-                  paddingBottom: isMobile ? '60px' : '20px' // 移动端底部额外间距
+                  paddingBottom: isMobile ? '120px' : '40px', // 移动端增加更多底部间距
+                  minHeight: isMobile ? 'calc(100vh - 200px)' : 'auto' // 移动端确保最小高度
                 }}>
                   {/* 连接状态 */}
                   <div style={{
@@ -602,7 +685,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     borderRadius: '12px',
                     fontSize: '14px',
                     color: '#856404',
-                    lineHeight: '1.5'
+                    lineHeight: '1.5',
+                    marginBottom: isMobile ? '20px' : '0' // 移动端额外底部间距
                   }}>
                     💡 提示：这是一个全球共享的无限画布，所有人的绘画都会实时同步显示。请文明创作，共同维护良好的创作环境！
                   </div>
