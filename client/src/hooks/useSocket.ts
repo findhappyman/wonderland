@@ -16,7 +16,7 @@ export const useSocket = (): UseSocketReturn => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const initializedRef = useRef(false);
-  const roomStateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const roomStateTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     // 避免重复初始化
@@ -45,7 +45,7 @@ export const useSocket = (): UseSocketReturn => {
       console.log('⏳ 等待服务器分配用户身份...');
       
       // 设置超时检查
-      roomStateTimeoutRef.current = setTimeout(() => {
+      roomStateTimeoutRef.current = window.setTimeout(() => {
         if (!currentUser) {
           console.error('❌ 10秒内未收到服务器用户身份，可能存在连接问题');
           alert('连接超时：未能获取用户身份，请刷新页面重试');
@@ -61,7 +61,7 @@ export const useSocket = (): UseSocketReturn => {
       
       // 清除超时定时器
       if (roomStateTimeoutRef.current) {
-        clearTimeout(roomStateTimeoutRef.current);
+        window.clearTimeout(roomStateTimeoutRef.current);
         roomStateTimeoutRef.current = null;
       }
     });
@@ -72,7 +72,7 @@ export const useSocket = (): UseSocketReturn => {
       
       // 清除超时定时器，因为已经收到房间状态
       if (roomStateTimeoutRef.current) {
-        clearTimeout(roomStateTimeoutRef.current);
+        window.clearTimeout(roomStateTimeoutRef.current);
         roomStateTimeoutRef.current = null;
       }
       
@@ -93,7 +93,7 @@ export const useSocket = (): UseSocketReturn => {
         console.log('🔍 调试信息:', { 
           socketId: newSocket.id, 
           roomUsers: convertedUsers,
-          roomUsersIds: convertedUsers.map(u => u.id)
+          roomUsersIds: convertedUsers.map((u: User) => u.id)
         });
       }
       
@@ -182,7 +182,7 @@ export const useSocket = (): UseSocketReturn => {
       
       // 清除超时定时器
       if (roomStateTimeoutRef.current) {
-        clearTimeout(roomStateTimeoutRef.current);
+        window.clearTimeout(roomStateTimeoutRef.current);
         roomStateTimeoutRef.current = null;
       }
     };
