@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import InfiniteCanvas from './components/InfiniteCanvas';
 import UnifiedPanel from './components/UnifiedPanel';
 import LoginModal from './components/LoginModal';
-import { CanvasState, User } from './types';
+import { CanvasState } from './types';
 import { useSocket } from './hooks/useSocket';
 import { generateRandomInitialPosition } from './utils/user';
 

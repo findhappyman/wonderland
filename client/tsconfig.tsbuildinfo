@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/infinitecanvas.tsx","./src/components/unifiedpanel.tsx","./src/hooks/usesocket.ts","./src/types/index.ts","./src/utils/user.ts"],"version":"5.8.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/infinitecanvas.tsx","./src/components/loginmodal.tsx","./src/components/unifiedpanel.tsx","./src/hooks/usesocket.ts","./src/types/index.ts","./src/utils/user.ts"],"version":"5.8.3"}
