@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import InfiniteCanvas from './components/InfiniteCanvas';
 import UnifiedPanel from './components/UnifiedPanel';
+import LoginModal from './components/LoginModal';
 import { CanvasState, User } from './types';
 import { useSocket } from './hooks/useSocket';
 import { generateRandomInitialPosition } from './utils/user';
@@ -18,14 +19,16 @@ const App: React.FC = () => {
     currentCoordinates: { x: 0, y: 0 }
   });
 
-  // 服务器会基于IP自动分配用户身份，这里只需要一个临时的占位用户
-  const placeholderUser: User = {
-    id: 'temp',
-    name: '连接中...',
-    color: '#999999'
-  };
-
-  const { socket, users, isConnected, currentUser } = useSocket();
+  const { 
+    socket, 
+    users, 
+    isConnected, 
+    currentUser,
+    isLoggedIn,
+    loginError,
+    login,
+    logout
+  } = useSocket();
 
   const handleCanvasStateChange = (newState: Partial<CanvasState>) => {
     setCanvasState(prev => ({ ...prev, ...newState }));
@@ -49,6 +52,43 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLogin = (userId: string, username: string) => {
+    console.log('🚀 App: 开始登录', { userId, username });
+    login(userId, username);
+  };
+
+  const handleLogout = () => {
+    console.log('👋 App: 用户登出');
+    logout();
+  };
+
+  // 如果未登录，显示登录界面
+  if (!isLoggedIn) {
+    return (
+      <div className="app" style={{ position: 'relative', width: '100vw', height: '100vh' }}>
+        {/* 背景画布预览 */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          opacity: 0.3,
+          zIndex: 1
+        }} />
+        
+        <LoginModal
+          isOpen={true}
+          onLogin={handleLogin}
+          isConnecting={isConnected && !isLoggedIn}
+          error={loginError || undefined}
+        />
+      </div>
+    );
+  }
+
+  // 已登录，显示主应用界面
   return (
     <div className="app" style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <InfiniteCanvas 
@@ -56,7 +96,7 @@ const App: React.FC = () => {
         canvasState={canvasState}
         onStateChange={handleCanvasStateChange}
         socket={socket}
-        currentUser={currentUser || placeholderUser}
+        currentUser={currentUser!}
         users={users}
       />
       <UnifiedPanel
@@ -65,7 +105,8 @@ const App: React.FC = () => {
         onClearCanvas={handleClearCanvas}
         onRandomTeleport={handleRandomTeleport}
         onUpdateUsername={handleUpdateUsername}
-        currentUser={currentUser || placeholderUser}
+        onLogout={handleLogout}
+        currentUser={currentUser!}
         users={users}
         isConnected={isConnected}
       />

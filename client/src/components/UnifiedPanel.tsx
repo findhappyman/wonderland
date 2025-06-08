@@ -7,6 +7,7 @@ interface UnifiedPanelProps {
   onClearCanvas?: () => void;
   onRandomTeleport?: () => void;
   onUpdateUsername?: (newUsername: string) => void;
+  onLogout?: () => void;
   currentUser: User;
   users: User[];
   isConnected: boolean;
@@ -18,6 +19,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
   onClearCanvas,
   onRandomTeleport,
   onUpdateUsername,
+  onLogout,
   currentUser,
   users,
   isConnected
@@ -810,6 +812,42 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                   }}>
                     💡 提示：这是一个全球共享的无限画布，所有人的绘画都会实时同步显示。请文明创作，共同维护良好的创作环境！
                   </div>
+
+                  {/* 登出按钮 */}
+                  {onLogout && (
+                    <div>
+                      <button
+                        onClick={onLogout}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: 'linear-gradient(45deg, #FF6B6B, #FF8E53)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '12px',
+                          fontSize: '16px',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          boxShadow: '0 4px 15px rgba(255, 107, 107, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.4)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 4px 15px rgba(255, 107, 107, 0.3)';
+                        }}
+                      >
+                        🚪 退出登录
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

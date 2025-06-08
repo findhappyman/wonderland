@@ -156,23 +156,26 @@ io.on('connection', (socket) => {
   const clientIP = getClientIP(socket);
   console.log(`🔗 用户连接: ${socket.id}, IP: ${clientIP}`);
   
-  // 根据IP获取或创建用户
-  const userByIP = getOrCreateUserByIP(clientIP, socket.id);
-  console.log(`👤 用户信息已准备:`, { 
-    socketId: socket.id, 
-    ip: clientIP, 
-    username: userByIP.username, 
-    color: userByIP.color 
-  });
-  
   let currentUser = null;
   let currentRoomId = null;
 
-  // 自动加入全局房间
-  const autoJoinRoom = (roomId = 'global') => {
+  // 用户加入房间（支持自定义用户ID）
+  socket.on('join_room', ({ roomId, username, userId }) => {
     try {
-      console.log(`🚪 开始自动加入房间: ${roomId}, Socket: ${socket.id}`);
-      
+      console.log(`🚪 收到加入房间请求:`, { roomId, username, userId, socketId: socket.id });
+
+      // 验证用户名
+      if (!isValidUsername(username)) {
+        socket.emit('error', { message: '用户名必须是2-20个字符' });
+        return;
+      }
+
+      // 验证用户ID（如果提供）
+      if (userId && (userId.trim().length < 3 || userId.trim().length > 20)) {
+        socket.emit('error', { message: '用户ID必须是3-20个字符' });
+        return;
+      }
+
       // 如果用户已经在其他房间，先离开
       if (currentRoomId && currentUser) {
         console.log(`🚪 离开旧房间: ${currentRoomId}`);
@@ -187,27 +190,56 @@ io.on('connection', (socket) => {
         }
       }
 
-      // 使用IP识别的用户信息
+      // 创建用户信息
+      const finalUserId = userId ? userId.trim() : socket.id;
+      
+      // 如果提供了自定义用户ID，检查是否已被占用
+      const room = getOrCreateRoom(roomId);
+      if (userId) {
+        const existingUser = Array.from(room.users.values()).find(
+          user => user.customId === finalUserId && user.id !== socket.id
+        );
+        if (existingUser) {
+          socket.emit('error', { message: `用户ID "${finalUserId}" 已被占用，请选择其他ID` });
+          return;
+        }
+      }
+
+      // 检查用户名是否已存在（排除当前用户）
+      const existingUsername = Array.from(room.users.values()).find(
+        user => user.username.toLowerCase() === username.toLowerCase() && user.id !== socket.id
+      );
+      if (existingUsername) {
+        socket.emit('error', { message: '用户名已存在，请选择其他用户名' });
+        return;
+      }
+
+      // 创建用户对象
       currentUser = {
-        ...userByIP,
+        id: socket.id,
+        customId: finalUserId, // 自定义用户ID
+        username: username.trim(),
+        color: generateRandomColor(),
+        ip: clientIP,
+        isOnline: true,
         joinedAt: new Date()
       };
-      
-      console.log(`👤 当前用户设置完成:`, { 
-        id: currentUser.id, 
+
+      console.log(`👤 用户信息创建完成:`, { 
+        socketId: currentUser.id,
+        customId: currentUser.customId,
         username: currentUser.username, 
         color: currentUser.color,
         ip: currentUser.ip 
       });
 
       currentRoomId = roomId;
-      const room = getOrCreateRoom(roomId);
       
-      // 检查房间中是否已有相同IP的用户，如果有则替换
+      // 检查房间中是否已有相同socket ID的用户，如果有则替换
       for (const [userId, user] of room.users.entries()) {
-        if (user.ip === clientIP) {
+        if (user.id === socket.id) {
           room.users.delete(userId);
-          console.log(`🔄 替换房间中的旧连接: ${userId} -> ${socket.id}`);
+          console.log(`🔄 替换房间中的旧连接: ${userId}`);
           break;
         }
       }
@@ -218,7 +250,9 @@ io.on('connection', (socket) => {
       
       console.log(`🏠 用户已加入房间:`, { 
         roomId, 
-        userId: currentUser.id, 
+        userId: currentUser.id,
+        customId: currentUser.customId,
+        username: currentUser.username,
         roomUsersCount: room.users.size,
         roomDrawingPathsCount: room.drawingPaths.length 
       });
@@ -243,62 +277,18 @@ io.on('connection', (socket) => {
       };
       
       console.log(`📡 通知其他用户有新用户加入:`, { 
-        newUserId: currentUser.id, 
+        newUserId: currentUser.id,
+        newUserCustomId: currentUser.customId,
+        newUsername: currentUser.username,
         totalUsers: userJoinedData.users.length 
       });
       
       socket.to(roomId).emit('user_joined', userJoinedData);
 
-      console.log(`✅ 用户 ${currentUser.username} (IP: ${clientIP}) 成功加入房间 ${roomId}`);
+      console.log(`✅ 用户 ${currentUser.username} (Custom ID: ${currentUser.customId}, IP: ${clientIP}) 成功加入房间 ${roomId}`);
     } catch (error) {
-      console.error('❌ 自动加入房间错误:', error);
+      console.error('❌ 加入房间错误:', error);
       socket.emit('error', { message: '加入房间失败: ' + error.message });
-    }
-  };
-
-  // 立即尝试自动加入全局房间
-  console.log(`🎯 开始为 ${socket.id} 执行自动加入房间...`);
-  
-  // 使用 setTimeout 确保在下一个事件循环中执行，避免潜在的竞态条件
-  setTimeout(() => {
-    try {
-      autoJoinRoom();
-      console.log(`✅ ${socket.id} 自动加入房间完成`);
-    } catch (error) {
-      console.error(`❌ ${socket.id} 自动加入房间失败:`, error);
-      // 发送错误事件给客户端
-      socket.emit('error', { message: '自动加入房间失败，请刷新页面重试' });
-    }
-  }, 100); // 延迟100ms执行
-
-  // 用户加入房间（保留原有接口，但现在主要用于切换房间）
-  socket.on('join_room', ({ roomId, username }) => {
-    try {
-      // 如果提供了用户名，更新用户名
-      if (username && isValidUsername(username)) {
-        // 检查用户名是否已存在（排除当前用户）
-        const room = rooms.get(roomId);
-        if (room) {
-          const existingUser = Array.from(room.users.values()).find(
-            user => user.username.toLowerCase() === username.toLowerCase() && user.id !== socket.id
-          );
-          if (existingUser) {
-            socket.emit('error', { message: '用户名已存在，请选择其他用户名' });
-            return;
-          }
-        }
-        
-        // 更新用户名
-        userByIP.username = username.trim();
-        ipUserMap.set(clientIP, userByIP);
-        console.log(`🏷️ IP ${clientIP} 更新用户名为: ${username}`);
-      }
-
-      // 重新加入房间（会使用更新后的用户信息）
-      autoJoinRoom(roomId);
-    } catch (error) {
-      console.error('加入房间错误:', error);
-      socket.emit('error', { message: '加入房间失败' });
     }
   });
 
@@ -473,8 +463,7 @@ io.on('connection', (socket) => {
       
       // 更新用户名
       currentUser.username = username.trim();
-      userByIP.username = username.trim();
-      ipUserMap.set(clientIP, userByIP);
+      ipUserMap.set(clientIP, currentUser);
 
       // 更新房间中的用户信息
       if (currentRoomId) {
