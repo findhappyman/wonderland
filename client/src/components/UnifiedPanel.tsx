@@ -36,6 +36,19 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
+  // 防止背景滚动
+  useEffect(() => {
+    if (isExpanded) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isExpanded]);
+
   const presetColors = [
     '#000000', '#FF0000', '#00FF00', '#0000FF', 
     '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500',
@@ -178,7 +191,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
               borderBottom: '1px solid #e0e0e0',
               display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              flexShrink: 0
             }}>
               <h2 style={{ margin: 0, fontSize: '20px', color: '#333' }}>
                 🎨 无限画布
@@ -200,7 +214,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             {/* 标签切换 */}
             <div style={{
               display: 'flex',
-              borderBottom: '1px solid #e0e0e0'
+              borderBottom: '1px solid #e0e0e0',
+              flexShrink: 0
             }}>
               <button
                 onClick={() => setActiveTab('tools')}
@@ -234,14 +249,23 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
               </button>
             </div>
 
-            {/* 内容区域 */}
+            {/* 内容区域 - 修复移动端滚动 */}
             <div style={{
               flex: 1,
               padding: '20px',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              WebkitOverflowScrolling: 'touch', // iOS 平滑滚动
+              scrollbarWidth: 'thin', // Firefox 细滚动条
+              minHeight: 0 // 确保 flex 子元素可以滚动
             }}>
               {activeTab === 'tools' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '24px',
+                  paddingBottom: isMobile ? '60px' : '20px' // 移动端底部额外间距
+                }}>
                   {/* 工具选择 */}
                   <div>
                     <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#333' }}>
@@ -354,29 +378,16 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                   {/* 视图控制 */}
                   <div>
                     <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#333' }}>
-                      🎯 视图控制
+                      🔍 视图控制 (缩放: {Math.round(zoom * 100)}%)
                     </h3>
-                    <div style={{
-                      background: '#f8f9fa',
-                      padding: '12px',
-                      borderRadius: '12px',
-                      marginBottom: '12px',
-                      fontSize: '14px',
-                      color: '#666'
-                    }}>
-                      缩放: {Math.round(zoom * 100)}%
-                      {showCoordinates && currentCoordinates && (
-                        <><br/>位置: ({Math.round(currentCoordinates.x)}, {Math.round(currentCoordinates.y)})</>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       <button
                         onClick={resetView}
                         style={{
                           padding: '12px',
                           border: 'none',
                           borderRadius: '12px',
-                          background: '#34C759',
+                          background: '#007AFF',
                           color: 'white',
                           cursor: 'pointer',
                           fontSize: '14px',
@@ -425,30 +436,54 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     </div>
                   </div>
 
-                  {/* 坐标显示 */}
-                  <div>
+                  {/* 坐标显示 - 确保在移动端可见 */}
+                  <div style={{
+                    padding: '16px',
+                    background: '#f8f9fa',
+                    borderRadius: '12px',
+                    border: '2px solid #e0e0e0'
+                  }}>
                     <label style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px',
                       cursor: 'pointer',
                       fontSize: '16px',
-                      color: '#333'
+                      color: '#333',
+                      fontWeight: 'bold'
                     }}>
                       <input
                         type="checkbox"
                         checked={showCoordinates || false}
                         onChange={(e) => onStateChange({ showCoordinates: e.target.checked })}
-                        style={{ transform: 'scale(1.2)' }}
+                        style={{ 
+                          transform: 'scale(1.5)',
+                          accentColor: '#007AFF'
+                        }}
                       />
                       📍 显示坐标信息
                     </label>
+                    {showCoordinates && (
+                      <div style={{
+                        marginTop: '8px',
+                        fontSize: '12px',
+                        color: '#666',
+                        fontFamily: 'monospace'
+                      }}>
+                        当前位置: ({Math.round(currentCoordinates.x)}, {Math.round(currentCoordinates.y)})
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
               {activeTab === 'users' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '16px',
+                  paddingBottom: isMobile ? '60px' : '20px' // 移动端底部额外间距
+                }}>
                   {/* 连接状态 */}
                   <div style={{
                     padding: '16px',
@@ -517,7 +552,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                       overflowY: 'auto',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '8px'
+                      gap: '8px',
+                      WebkitOverflowScrolling: 'touch'
                     }}>
                       {users.length === 0 ? (
                         <div style={{
