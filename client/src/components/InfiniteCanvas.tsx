@@ -632,7 +632,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
         }}>
           🌍 ({Math.round(-offset.x)}, {Math.round(-offset.y)}) | 
           🔍 {Math.round(zoom * 100)}% | 
-          👥 {users.length} 人在线
+          👥 {users.length + 1} 人在线
         </div>
       )}
     </div>

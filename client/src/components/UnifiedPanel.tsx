@@ -164,7 +164,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             borderRadius: '50%',
             backgroundColor: isConnected ? '#34C759' : '#FF3B30'
           }} />
-          <span>{users.length} 人在线</span>
+          <span>{users.length + 1} 人在线</span>
         </div>
       )}
 
@@ -261,7 +261,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                   fontSize: '14px'
                 }}
               >
-                👥 用户 ({users.length})
+                👥 用户 ({users.length + 1})
               </button>
             </div>
 
