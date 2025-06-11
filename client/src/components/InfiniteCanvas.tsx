@@ -52,14 +52,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
   const [isDrawing, setIsDrawing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [currentPath, setCurrentPath] = useState<DrawingPath | null>(null);
-  const [currentPathId, setCurrentPathId] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState<Point>({ x: 0, y: 0 });
   const [hasInitialized, setHasInitialized] = useState(false);
 
   const lastPointRef = useRef<Point | null>(null);
   const lastPanPointRef = useRef<Point | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const lastDrawingUpdateRef = useRef<number>(0);
   const redrawTimeoutRef = useRef<number | null>(null);
 
   const { zoom, offset, tool, color, size, showCoordinates } = canvasState;
@@ -382,9 +380,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       
       // 清空当前绘画状态
       setCurrentPath(null);
-      setCurrentPathId(null);
-      setIsDrawing(false);
       lastPointRef.current = null;
+      setIsDrawing(false);
     }
   }, [isPanning, isDrawing, tool, currentPath, endDrawing, onDrawingEnded]);
 

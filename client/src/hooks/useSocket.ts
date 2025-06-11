@@ -12,6 +12,7 @@ export interface DrawingPath {
 
 export interface User {
   id: string;
+  name: string;
   username: string;
   color: string;
   providedUserId: string;
@@ -66,7 +67,7 @@ export const useSocket = (): UseSocketReturn => {
   const [drawingPaths, setDrawingPaths] = useState<DrawingPath[]>([]);
   const [loginError, setLoginError] = useState<string | null>(null);
   const initializedRef = useRef(false);
-  const roomStateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const roomStateTimeoutRef = useRef<number | null>(null);
   const [isAutoLoginAttempting, setIsAutoLoginAttempting] = useState(false);
   const pendingLoginResolveRef = useRef<(() => void) | null>(null);
   const pendingLoginRejectRef = useRef<((error: Error) => void) | null>(null);
@@ -190,6 +191,7 @@ export const useSocket = (): UseSocketReturn => {
       
       const convertedUsers = roomUsers.map((user: any) => ({
         id: user.id,
+        name: user.username,
         username: user.username,
         color: user.color,
         providedUserId: user.providedUserId || user.id,
@@ -230,6 +232,7 @@ export const useSocket = (): UseSocketReturn => {
       
       const convertedUsers = roomUsers.map((user: any) => ({
         id: user.id,
+        name: user.username,
         username: user.username,
         color: user.color,
         providedUserId: user.providedUserId || user.id,
@@ -246,6 +249,7 @@ export const useSocket = (): UseSocketReturn => {
       
       const convertedUsers = roomUsers.map((user: any) => ({
         id: user.id,
+        name: user.username,
         username: user.username,
         color: user.color,
         providedUserId: user.providedUserId || user.id,
@@ -262,6 +266,7 @@ export const useSocket = (): UseSocketReturn => {
       
       const convertedUsers = roomUsers.map((user: any) => ({
         id: user.id,
+        name: user.username,
         username: user.username,
         color: user.color,
         providedUserId: user.providedUserId || user.id,
@@ -371,7 +376,7 @@ export const useSocket = (): UseSocketReturn => {
       pendingLoginRejectRef.current = reject;
 
       // 设置10秒超时
-      const timeout = setTimeout(() => {
+      const timeout = window.setTimeout(() => {
         setLoginError('登录超时，请检查网络连接或稍后再试');
         pendingLoginResolveRef.current = null;
         pendingLoginRejectRef.current = null;
