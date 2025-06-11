@@ -1,0 +1,11 @@
+{
+  "testuser": {
+    "username": "testuser",
+    "normalizedUsername": "testuser",
+    "providedUserId": "test123",
+    "passwordHash": "$2b$10$F.VP5QJom45zPethJth3VOgJLYoPXBkfGOIk1syqBO/qagyi99/8e",
+    "color": "#85C1E9",
+    "createdAt": "2025-06-11T14:27:57.244Z",
+    "lastLogin": "2025-06-11T14:33:10.899Z"
+  }
+}

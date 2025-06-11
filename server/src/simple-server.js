@@ -57,6 +57,10 @@ const userDatabase = new Map();
 // 密码哈希轮数
 const SALT_ROUNDS = 10;
 
+// 数据变更标记
+let userDataChanged = false;
+let roomDataChanged = false;
+
 // 确保数据目录存在
 async function ensureDataDirectory() {
   try {
@@ -161,11 +165,17 @@ async function saveRoomsDatabase() {
   }
 }
 
-// 定期保存数据（每5分钟）
+// 定期保存数据（每30分钟，仅在数据变更时保存）
 setInterval(async () => {
-  await saveUserDatabase();
-  await saveRoomsDatabase();
-}, 5 * 60 * 1000);
+  if (userDataChanged) {
+    await saveUserDatabase();
+    userDataChanged = false;
+  }
+  if (roomDataChanged) {
+    await saveRoomsDatabase();
+    roomDataChanged = false;
+  }
+}, 30 * 60 * 1000); // 30分钟
 
 // 密码验证函数
 async function validatePassword(password) {
@@ -202,6 +212,7 @@ async function createOrValidateUser(username, password, providedUserId) {
       // 更新最后登录时间
       existingUser.lastLogin = new Date();
       userDatabase.set(normalizedUsername, existingUser);
+      userDataChanged = true;
       
       return { 
         success: true, 
@@ -222,6 +233,7 @@ async function createOrValidateUser(username, password, providedUserId) {
       };
       
       userDatabase.set(normalizedUsername, newUser);
+      userDataChanged = true;
       await saveUserDatabase(); // 立即保存新用户
       console.log(`🆕 创建新用户账户: ${username} (ID: ${providedUserId})`);
       
@@ -527,8 +539,8 @@ io.on('connection', (socket) => {
       room.drawingPaths.push(drawingPath);
       console.log('✅ 绘画路径已创建:', { pathId: drawingPath.id, userId: drawingPath.userId, pointsCount: drawingPath.points.length });
 
-      // 立即保存到文件
-      await saveRoomsDatabase();
+      // 标记数据变更
+      roomDataChanged = true;
 
       // 广播给房间内所有用户（包括自己）
       console.log('📡 广播绘画开始事件到房间:', { roomId, usersCount: room.users.size });
@@ -564,6 +576,7 @@ io.on('connection', (socket) => {
 
       // 更新路径点
       room.drawingPaths[pathIndex].points = points;
+      roomDataChanged = true;
 
       // 广播更新给所有用户（包括发起者）
       io.to(roomId).emit('drawing_updated', { pathId, points });
@@ -580,8 +593,11 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // 保存到文件
-      await saveRoomsDatabase();
+      // 绘画结束时保存到文件
+      if (roomDataChanged) {
+        await saveRoomsDatabase();
+        roomDataChanged = false;
+      }
 
       // 广播绘画结束给所有用户（包括发起者自己）
       io.to(roomId).emit('drawing_ended', { pathId });
@@ -628,7 +644,8 @@ io.on('connection', (socket) => {
       const deletedPaths = room.drawingPaths.filter(p => p.userId === currentUser.id);
       room.drawingPaths = room.drawingPaths.filter(p => p.userId !== currentUser.id);
 
-      // 立即保存到文件
+      // 标记数据变更并立即保存
+      roomDataChanged = true;
       await saveRoomsDatabase();
 
       // 广播删除事件给所有用户
@@ -695,6 +712,7 @@ io.on('connection', (socket) => {
           userDatabase.set(normalizedNewUsername, userAccount);
         }
         
+        userDataChanged = true;
         await saveUserDatabase();
       }
 

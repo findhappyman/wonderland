@@ -1,41 +1,56 @@
 import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { Socket } from 'socket.io-client';
 import { CanvasState, User, Point } from '../types';
 import { generateRandomInitialPosition } from '../utils/user';
+
+interface DrawingPath {
+  id: string;
+  userId: string;
+  points: Point[];
+  color: string;
+  width: number;
+  createdAt: string;
+}
 
 interface InfiniteCanvasProps {
   canvasState: CanvasState;
   onStateChange: (newState: Partial<CanvasState>) => void;
-  socket: Socket | null;
   currentUser: User;
   users: User[];
+  drawingPaths: DrawingPath[];
+  // Socket functions
+  sendDrawing: (pathData: any) => void;
+  updateDrawing: (pathId: string, points: any[]) => void;
+  endDrawing: (pathId: string) => void;
+  clearMyDrawings: () => void;
+  // Drawing event handlers
+  onDrawingStarted?: (path: DrawingPath) => void;
+  onDrawingUpdated?: (pathId: string, points: Point[]) => void;
+  onDrawingEnded?: (pathId: string) => void;
+  onDrawingsCleared?: (userId: string, deletedPathIds: string[]) => void;
 }
 
 export interface InfiniteCanvasRef {
   clearMyDrawings: () => void;
 }
 
-interface DrawingPath {
-  id: string;
-  userId: string;
-  username: string;
-  points: Point[];
-  color: string;
-  size: number;
-  createdAt: Date;
-}
-
 const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
   canvasState,
   onStateChange,
-  socket,
   currentUser,
-  users
+  users,
+  drawingPaths,
+  sendDrawing,
+  updateDrawing,
+  endDrawing,
+  clearMyDrawings,
+  onDrawingStarted,
+  onDrawingUpdated,
+  onDrawingEnded,
+  onDrawingsCleared
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
-  const [drawingPaths, setDrawingPaths] = useState<DrawingPath[]>([]);
   const [currentPath, setCurrentPath] = useState<DrawingPath | null>(null);
   const [currentPathId, setCurrentPathId] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState<Point>({ x: 0, y: 0 });
@@ -51,12 +66,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
 
   // 清空我的绘画
   const handleClearMyDrawings = useCallback(() => {
-    if (!socket) return;
-    
-    socket.emit('clear_my_drawings', {
-      roomId: 'global'
-    });
-  }, [socket]);
+    clearMyDrawings();
+  }, [clearMyDrawings]);
 
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
@@ -97,7 +108,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     applyTransform(ctx);
     
     ctx.strokeStyle = path.color;
-    ctx.lineWidth = path.size / zoom;
+    ctx.lineWidth = path.width / zoom;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.globalCompositeOperation = 'source-over'; // 确保正常绘制模式
@@ -109,7 +120,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       const point = path.points[0];
       ctx.fillStyle = path.color;
       ctx.beginPath();
-      ctx.arc(point.x, point.y, path.size / zoom / 2, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, path.width / zoom / 2, 0, Math.PI * 2);
       ctx.fill();
     } else if (path.points.length === 2) {
       // 两点绘制为直线
@@ -210,51 +221,17 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
   }, [zoom, offset, applyTransform, drawingPaths, currentPath, drawPath, showCoordinates, mousePosition, getCanvasCoordinates]);
 
   // 绘画更新函数
-  const updateDrawing = useCallback((coords: Point) => {
-    if (!socket || !currentPath || !currentUser) {
-      console.log('⚠️ updateDrawing 跳过:', { 
-        socket: !!socket, 
-        currentPath: !!currentPath, 
-        currentUser: !!currentUser,
-        currentUserId: currentUser?.id 
-      });
-      return;
-    }
-
-    const now = Date.now();
-    // 限制更新频率为30fps，减少重绘频率
-    if (now - lastDrawingUpdateRef.current < 33) return;
+  const updateDrawingPath = useCallback((coords: Point) => {
+    if (!currentPath) return;
     
-    lastDrawingUpdateRef.current = now;
-
-    const updatedPath = {
-      ...currentPath,
-      points: [...currentPath.points, coords]
-    };
+    const updatedPoints = [...currentPath.points, coords];
+    setCurrentPath(prev => prev ? { ...prev, points: updatedPoints } : null);
     
-    // 使用批量更新，减少重绘次数
-    setCurrentPath(updatedPath);
-    
-    console.log('🖌️ 更新绘画路径:', { 
-      pathId: currentPath.id, 
-      pointsCount: updatedPath.points.length,
-      hasId: !!currentPath.id,
-      coords,
-      userId: currentUser.id
-    });
-
-    // 只有当路径有ID时才发送更新到服务器
+    // 发送更新到服务器
     if (currentPath.id) {
-      socket.emit('drawing_update', {
-        roomId: 'global',
-        pathId: currentPath.id,
-        points: updatedPath.points
-      });
-      console.log('📡 发送绘画更新到服务器:', { pathId: currentPath.id, pointsCount: updatedPath.points.length });
-    } else {
-      console.log('⏳ 等待路径ID分配，暂不发送更新');
+      updateDrawing(currentPath.id, updatedPoints);
     }
-  }, [socket, currentPath, currentUser]);
+  }, [currentPath, updateDrawing]);
 
   // 处理鼠标移动（更新坐标显示）
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -285,7 +262,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       });
       
       lastPanPointRef.current = { x: canvasX, y: canvasY };
-    } else if (isDrawing && lastPointRef.current && currentPath && socket) {
+    } else if (isDrawing && lastPointRef.current && currentPath) {
       // 绘画 - 使用节流更新
       const coords = getCanvasCoordinates(e.clientX, e.clientY);
       
@@ -297,17 +274,17 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       
       if (distance > 2) { // 最小距离阈值
         console.log('🎨 鼠标移动触发绘画更新:', { coords, distance, currentPathId: currentPath?.id });
-        updateDrawing(coords);
+        updateDrawingPath(coords);
         lastPointRef.current = coords;
       }
     }
-  }, [isPanning, isDrawing, getCanvasCoordinates, currentPath, socket, offset, onStateChange, updateDrawing]);
+  }, [isPanning, isDrawing, getCanvasCoordinates, currentPath, offset, onStateChange, updateDrawingPath]);
 
   // 处理鼠标按下
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    if (!socket || !currentUser) {
-      console.log('⚠️ 无法开始绘画 - 未连接或用户未认证:', { socket: !!socket, currentUser: !!currentUser });
+    if (!currentUser) {
+      console.log('⚠️ 无法开始绘画 - 用户未认证:', { currentUser: !!currentUser });
       return;
     }
     
@@ -348,18 +325,17 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
         const newPath: DrawingPath = {
           id: '',
           userId: currentUser.id,
-          username: currentUser.name,
           points: [coords],
           color: color,
-          size: size,
-          createdAt: new Date()
+          width: size,
+          createdAt: new Date().toISOString()
         };
         setCurrentPath(newPath);
         console.log('创建新路径:', newPath);
 
         // 发送到服务器
-        socket.emit('drawing_start', {
-          roomId: 'global',
+        sendDrawing({
+          roomId: 'main',
           path: {
             points: [coords],
             color: color,
@@ -370,7 +346,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
         console.log('📡 已发送绘画开始请求到服务器');
       }
     }
-  }, [tool, color, size, getCanvasCoordinates, socket, currentUser, isDrawing]);
+  }, [tool, color, size, getCanvasCoordinates, sendDrawing, currentUser, isDrawing]);
 
   // 处理鼠标抬起
   const handleMouseUp = useCallback(() => {
@@ -383,7 +359,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       canvas.style.cursor = tool === 'pan' ? 'grab' : 'crosshair';
     }
     
-    if (isDrawing && currentPath && socket) {
+    if (isDrawing && currentPath) {
       console.log('🏁 结束绘画:', { 
         pathId: currentPath.id, 
         hasId: !!currentPath.id,
@@ -393,14 +369,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       // 完成当前路径 - 只有当路径有ID时才发送结束事件
       if (currentPath.id) {
         console.log('📡 发送drawing_end事件:', currentPath.id);
-        socket.emit('drawing_end', {
-          roomId: 'global',
-          pathId: currentPath.id
-        });
+        endDrawing(currentPath.id);
         
         // 立即将当前路径移动到drawingPaths中，不等待服务器响应
         console.log('✅ 立即保存路径到drawingPaths:', currentPath);
-        setDrawingPaths(prev => [...prev, currentPath]);
+        if (onDrawingEnded) {
+          onDrawingEnded(currentPath.id);
+        }
       } else {
         console.log('⚠️ 路径没有ID，无法发送结束事件');
       }
@@ -411,7 +386,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       setIsDrawing(false);
       lastPointRef.current = null;
     }
-  }, [isPanning, isDrawing, tool, currentPath, socket]);
+  }, [isPanning, isDrawing, tool, currentPath, endDrawing, onDrawingEnded]);
 
   // 添加触摸事件处理
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -473,72 +448,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     });
   }, [zoom, offset, onStateChange]);
 
-  // Socket事件监听
+  // Socket事件处理现在通过props传入
   useEffect(() => {
-    if (!socket) return;
-
-    socket.on('drawing_started', ({ path }) => {
-      console.log('收到新绘画:', path);
-      
-      if (path.userId === currentUser.id) {
-        // 这是当前用户的路径，更新当前路径的ID，但不添加到drawingPaths中
-        setCurrentPathId(path.id);
-        setCurrentPath(prev => prev ? { ...prev, id: path.id } : null);
-        console.log('更新当前路径ID:', path.id);
-      } else {
-        // 这是其他用户的路径，添加到drawingPaths中
-        setDrawingPaths(prev => [...prev, path]);
-      }
-    });
-
-    socket.on('drawing_updated', ({ pathId, points }) => {
-      console.log('收到绘画更新:', { pathId, pointsCount: points.length });
-      
-      // 只更新其他用户的路径，不更新当前正在绘制的路径
-      if (pathId !== currentPathId) {
-        setDrawingPaths(prev => 
-          prev.map(path => 
-            path.id === pathId ? { ...path, points } : path
-          )
-        );
-      }
-    });
-
-    socket.on('drawing_ended', ({ pathId }) => {
-      console.log('收到绘画结束:', pathId, '当前路径ID:', currentPathId);
-      
-      // 这个事件主要用于通知其他用户某个路径已完成
-      // 当前用户的路径已经在handleMouseUp中立即保存了
-      // 这里只需要清理状态（如果是当前用户的路径）
-      if (pathId === currentPathId) {
-        console.log('✅ 确认当前用户路径已完成:', pathId);
-        // 状态已经在handleMouseUp中清理了，这里不需要额外操作
-      } else {
-        console.log('📝 其他用户完成绘画:', pathId);
-      }
-    });
-
-    socket.on('drawings_cleared', ({ userId, deletedPathIds }) => {
-      console.log('用户清空绘画:', userId, deletedPathIds);
-      setDrawingPaths(prev => 
-        prev.filter(path => !deletedPathIds.includes(path.id))
-      );
-      
-      // 如果是当前用户清空，也清空当前路径
-      if (userId === currentUser.id) {
-        setCurrentPath(null);
-        setCurrentPathId(null);
-        setIsDrawing(false);
-      }
-    });
-
-    return () => {
-      socket.off('drawing_started');
-      socket.off('drawing_updated');
-      socket.off('drawing_ended');
-      socket.off('drawings_cleared');
-    };
-  }, [socket, currentUser.id, currentPathId, currentPath]);
+    if (onDrawingStarted) {
+      // 当收到drawing_started事件时的处理逻辑可以在这里
+    }
+  }, [onDrawingStarted, onDrawingUpdated, onDrawingEnded, onDrawingsCleared, currentUser.id]);
 
   // 使用requestAnimationFrame优化重绘
   useEffect(() => {
@@ -590,6 +505,27 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
       canvas.style.cursor = 'crosshair';
     }
   }, [tool, isPanning]);
+
+  // 监听来自服务器的绘画路径，更新当前路径ID
+  useEffect(() => {
+    if (!currentPath || currentPath.id || !currentUser) return;
+    
+    // 查找最新的属于当前用户的路径
+    const latestUserPath = drawingPaths
+      .filter(path => path.userId === currentUser.id)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    
+    if (latestUserPath && !currentPath.id) {
+      console.log('✅ 从服务器获得路径ID，更新当前路径:', { 
+        pathId: latestUserPath.id, 
+        currentPathPoints: currentPath.points.length,
+        serverPathPoints: latestUserPath.points.length 
+      });
+      
+      // 更新当前路径的ID
+      setCurrentPath(prev => prev ? { ...prev, id: latestUserPath.id } : null);
+    }
+  }, [drawingPaths, currentPath, currentUser]);
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#f0f0f0' }}>

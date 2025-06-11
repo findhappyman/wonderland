@@ -20,14 +20,20 @@ const App: React.FC = () => {
   });
 
   const { 
-    socket, 
+    isConnected,
+    isLoggedIn, 
+    currentUser, 
     users, 
-    isConnected, 
-    currentUser,
-    isLoggedIn,
+    drawingPaths,
     loginError,
-    login,
-    logout
+    isAutoLoginAttempting,
+    login, 
+    logout,
+    updateUsername,
+    sendDrawing,
+    updateDrawing,
+    endDrawing,
+    clearMyDrawings 
   } = useSocket();
 
   const handleCanvasStateChange = (newState: Partial<CanvasState>) => {
@@ -41,26 +47,91 @@ const App: React.FC = () => {
   };
 
   const handleClearCanvas = () => {
-    if (canvasRef.current) {
-      canvasRef.current.clearMyDrawings();
-    }
+    clearMyDrawings();
   };
 
   const handleUpdateUsername = (newUsername: string) => {
-    if (socket && isConnected) {
-      socket.emit('update_username', { username: newUsername });
-    }
+    updateUsername(newUsername);
+  };
+
+  // 处理绘画事件
+  const handleDrawingStarted = (path: any) => {
+    console.log('绘画开始:', path);
+    // 可以在这里添加额外的逻辑
+  };
+
+  const handleDrawingUpdated = (pathId: string, points: any[]) => {
+    console.log('绘画更新:', { pathId, pointsCount: points.length });
+    // 可以在这里添加额外的逻辑
+  };
+
+  const handleDrawingEnded = (pathId: string) => {
+    console.log('绘画结束:', pathId);
+    // 可以在这里添加额外的逻辑
+  };
+
+  const handleDrawingsCleared = (userId: string, deletedPathIds: string[]) => {
+    console.log('绘画清空:', { userId, deletedPathIds });
+    // 可以在这里添加额外的逻辑
   };
 
   const handleLogin = (userId: string, username: string, password: string) => {
     console.log('🚀 App: 开始登录', { userId, username, passwordLength: password.length });
-    login(userId, username, password);
+    return login(userId, username, password, 'main');
   };
 
   const handleLogout = () => {
     console.log('👋 App: 用户登出');
     logout();
   };
+
+  // 获取连接状态显示文本
+  const getConnectionStatus = () => {
+    if (!isConnected) {
+      return '❌ 无法连接到服务器，请检查网络连接';
+    }
+    if (isAutoLoginAttempting) {
+      return '🔄 正在尝试自动登录...';
+    }
+    if (!isLoggedIn) {
+      return '⏳ 请登录以开始使用';
+    }
+    return '✅ 已连接并登录';
+  };
+
+  // 如果正在自动登录，显示加载界面
+  if (isAutoLoginAttempting) {
+    return (
+      <div className="app" style={{ position: 'relative', width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: '20px',
+          padding: '40px',
+          textAlign: 'center',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{
+            width: '60px',
+            height: '60px',
+            border: '6px solid #f3f3f3',
+            borderTop: '6px solid #667eea',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 20px'
+          }} />
+          <h2 style={{ color: '#333', marginBottom: '10px' }}>🔄 正在自动登录...</h2>
+          <p style={{ color: '#666', margin: 0 }}>请稍候，我们正在恢复您的登录状态</p>
+        </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   // 如果未登录，显示登录界面
   if (!isLoggedIn) {
@@ -77,6 +148,23 @@ const App: React.FC = () => {
           opacity: 0.3,
           zIndex: 1
         }} />
+        
+        {/* 状态指示器 */}
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(255, 255, 255, 0.9)',
+          padding: '10px 20px',
+          borderRadius: '10px',
+          fontSize: '14px',
+          fontWeight: '500',
+          zIndex: 10,
+          backdropFilter: 'blur(10px)'
+        }}>
+          {getConnectionStatus()}
+        </div>
         
         <LoginModal
           isOpen={true}
@@ -95,9 +183,17 @@ const App: React.FC = () => {
         ref={canvasRef}
         canvasState={canvasState}
         onStateChange={handleCanvasStateChange}
-        socket={socket}
         currentUser={currentUser!}
         users={users}
+        drawingPaths={drawingPaths}
+        sendDrawing={sendDrawing}
+        updateDrawing={updateDrawing}
+        endDrawing={endDrawing}
+        clearMyDrawings={clearMyDrawings}
+        onDrawingStarted={handleDrawingStarted}
+        onDrawingUpdated={handleDrawingUpdated}
+        onDrawingEnded={handleDrawingEnded}
+        onDrawingsCleared={handleDrawingsCleared}
       />
       <UnifiedPanel
         canvasState={canvasState}
