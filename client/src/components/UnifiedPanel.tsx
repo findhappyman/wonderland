@@ -306,8 +306,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             <div 
               ref={scrollContainerRef}
               style={{
-                flex: 1,
-                padding: '20px',
+              flex: 1,
+              padding: '20px',
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch', // iOS 平滑滚动
@@ -315,7 +315,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                 minHeight: 0, // 确保 flex 子元素可以滚动
                 maxHeight: 'calc(100vh - 140px)', // 限制最大高度，为头部和标签预留空间
                 position: 'relative'
-              }}>
+            }}>
               {activeTab === 'tools' && (
                 <div style={{ 
                   display: 'flex', 
@@ -642,13 +642,13 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                           alignItems: 'center',
                           gap: '12px',
                           flex: 1
-                        }}>
-                          <div style={{
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '50%',
-                            backgroundColor: currentUser.color
-                          }} />
+                      }}>
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: currentUser.color
+                        }} />
                           {isEditingUsername ? (
                             <div style={{
                               display: 'flex',
@@ -704,14 +704,14 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                               </button>
                             </div>
                           ) : (
-                            <span style={{
-                              fontSize: '16px',
-                              fontWeight: 'bold',
+                        <span style={{
+                          fontSize: '16px',
+                          fontWeight: 'bold',
                               color: '#333',
                               flex: 1
-                            }}>
-                              {currentUser.name}
-                            </span>
+                        }}>
+                          {currentUser.name}
+                        </span>
                           )}
                         </div>
                         {!isEditingUsername && (

@@ -146,10 +146,14 @@ export const useSocket = (): UseSocketReturn => {
     // 动态选择服务器地址：生产环境使用环境变量，开发环境使用本地服务器
     const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
     console.log('🔄 初始化Socket连接到:', serverUrl);
+    console.log('🔧 环境变量 VITE_SERVER_URL:', import.meta.env.VITE_SERVER_URL);
+    console.log('🌐 当前页面地址:', window.location.href);
     
     const newSocket = io(serverUrl, {
       transports: ['websocket', 'polling'],
-      autoConnect: true // 改为true，立即连接
+      autoConnect: true, // 改为true，立即连接
+      timeout: 10000,
+      forceNew: true
     });
 
     socketRef.current = newSocket;
@@ -176,7 +180,14 @@ export const useSocket = (): UseSocketReturn => {
 
     newSocket.on('connect_error', (error) => {
       console.error('❌ 连接错误:', error);
-      setLoginError('无法连接到服务器，请检查网络连接');
+      console.error('❌ 错误详情:', { 
+        message: error.message, 
+        type: (error as any).type, 
+        description: (error as any).description,
+        context: (error as any).context,
+        transportError: (error as any).transportError 
+      });
+      setLoginError(`无法连接到服务器: ${error.message || '网络连接错误'}`);
       setIsConnected(false);
     });
 

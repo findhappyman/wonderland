@@ -224,7 +224,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasRef, InfiniteCanvasProps>(({
     
     const updatedPoints = [...currentPath.points, coords];
     setCurrentPath(prev => prev ? { ...prev, points: updatedPoints } : null);
-    
+
     // 发送更新到服务器
     if (currentPath.id) {
       updateDrawing(currentPath.id, updatedPoints);

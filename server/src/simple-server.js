@@ -492,7 +492,7 @@ io.on('connection', (socket) => {
         user: currentUser,
         users: Array.from(room.users.values())
       };
-      
+
       console.log(`📡 通知其他用户有新用户加入:`, { 
         newUserId: currentUser.id,
         newUsername: currentUser.username,
@@ -841,14 +841,14 @@ async function startServer() {
     // 加载数据
     await loadUserDatabase();
     await loadRoomsDatabase();
-    
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
-      console.log(`📊 健康检查: http://localhost:${PORT}/health`);
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`🌐 局域网访问: http://192.168.100.171:${PORT}`);
-      }
-      console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+  console.log(`📊 健康检查: http://localhost:${PORT}/health`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`🌐 局域网访问: http://192.168.100.171:${PORT}`);
+  }
+  console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
       console.log(`📚 已注册用户: ${userDatabase.size}`);
       console.log(`🏠 已保存房间: ${rooms.size}`);
       const totalDrawings = Array.from(rooms.values()).reduce((sum, room) => sum + room.drawingPaths.length, 0);
