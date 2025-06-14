@@ -38,14 +38,11 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  // Railway WebSocket 配置优化
-  transports: ['websocket', 'polling'],
-  allowUpgrades: true,
-  upgradeTimeout: 30000,
-  pingTimeout: 25000,
-  pingInterval: 20000,
-  // 关键：启用粘性会话支持
-  sticky: true,
+  // Railway WebSocket 问题修复：强制使用 polling
+  transports: ['polling'], // 只使用 polling
+  allowUpgrades: false, // 禁用升级
+  pingTimeout: 60000, // 增加 ping 超时
+  pingInterval: 25000, // 增加 ping 间隔
   // 适应云端部署的配置
   serveClient: false,
   // 增加连接超时时间

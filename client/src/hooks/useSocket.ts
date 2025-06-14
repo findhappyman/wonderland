@@ -153,16 +153,16 @@ export const useSocket = (): UseSocketReturn => {
     console.log('🌐 当前页面地址:', window.location.href);
     
     const newSocket = io(serverUrl, {
-      // 云端部署优化配置
-      transports: ['polling', 'websocket'], // 先使用polling，再升级到websocket
+      // Railway WebSocket 问题修复：强制使用 polling
+      transports: ['polling'], // 只使用 polling，禁用 websocket
       autoConnect: true,
-      timeout: 30000, // 增加超时时间
+      timeout: 30000,
       forceNew: true,
-      upgrade: true,
+      upgrade: false, // 禁用升级到 websocket
       rememberUpgrade: false,
       // 重连配置
       reconnection: true,
-      reconnectionAttempts: 10, // 增加重连次数
+      reconnectionAttempts: 10,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
       // 云端部署特殊配置
