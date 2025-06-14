@@ -71,6 +71,7 @@ export const useSocket = (): UseSocketReturn => {
   const [isAutoLoginAttempting, setIsAutoLoginAttempting] = useState(false);
   const pendingLoginResolveRef = useRef<(() => void) | null>(null);
   const pendingLoginRejectRef = useRef<((error: Error) => void) | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   // 从本地存储获取用户凭据
   const getStoredCredentials = useCallback((): StoredCredentials | null => {
@@ -138,11 +139,13 @@ export const useSocket = (): UseSocketReturn => {
     console.log('🧹 已清除本地存储的用户数据');
   }, []);
 
-  // 初始化Socket连接但不自动登录
-  useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-    
+  // 初始化Socket连接的函数
+  const initializeSocket = useCallback(() => {
+    if (socketRef.current) {
+      console.log('⚠️ Socket已存在，跳过初始化');
+      return;
+    }
+
     // 动态选择服务器地址：生产环境使用环境变量，开发环境使用本地服务器
     const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080';
     console.log('🔄 初始化Socket连接到:', serverUrl);
@@ -150,10 +153,25 @@ export const useSocket = (): UseSocketReturn => {
     console.log('🌐 当前页面地址:', window.location.href);
     
     const newSocket = io(serverUrl, {
-      transports: ['websocket', 'polling'],
-      autoConnect: true, // 改为true，立即连接
-      timeout: 10000,
-      forceNew: true
+      // 云端部署优化配置
+      transports: ['polling', 'websocket'], // 先使用polling，再升级到websocket
+      autoConnect: true,
+      timeout: 30000, // 增加超时时间
+      forceNew: true,
+      upgrade: true,
+      rememberUpgrade: false,
+      // 重连配置
+      reconnection: true,
+      reconnectionAttempts: 10, // 增加重连次数
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+      // 云端部署特殊配置
+      withCredentials: true,
+      // 增加握手超时
+      handshakeTimeout: 20000,
+      // 增加心跳配置
+      heartbeatTimeout: 20000,
+      heartbeatInterval: 15000
     });
 
     socketRef.current = newSocket;
@@ -165,8 +183,8 @@ export const useSocket = (): UseSocketReturn => {
       setLoginError(null);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('❌ Disconnected from server');
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Disconnected from server, reason:', reason);
       setIsConnected(false);
       setCurrentUser(null);
       setUsers([]);
@@ -189,6 +207,22 @@ export const useSocket = (): UseSocketReturn => {
       });
       setLoginError(`无法连接到服务器: ${error.message || '网络连接错误'}`);
       setIsConnected(false);
+    });
+
+    // 添加重连事件监听
+    newSocket.on('reconnect', (attemptNumber) => {
+      console.log('🔄 重新连接成功，尝试次数:', attemptNumber);
+      setIsConnected(true);
+      setLoginError(null);
+    });
+
+    newSocket.on('reconnect_error', (error) => {
+      console.error('❌ 重连失败:', error);
+    });
+
+    newSocket.on('reconnect_failed', () => {
+      console.error('❌ 重连彻底失败');
+      setLoginError('无法连接到服务器，请检查网络连接后刷新页面');
     });
 
     // 房间状态更新 - 这是登录成功的标志
@@ -331,7 +365,6 @@ export const useSocket = (): UseSocketReturn => {
 
     newSocket.on('drawing_ended', ({ pathId }) => {
       console.log('📡 收到绘画结束:', pathId);
-      // 绘画结束事件主要用于确认路径完成
     });
 
     newSocket.on('drawings_cleared', ({ userId, deletedPathIds }) => {
@@ -346,10 +379,12 @@ export const useSocket = (): UseSocketReturn => {
       console.log('📡 收到Socket事件:', eventName, args);
     });
 
-    return () => {
+    // 设置清理函数
+    cleanupRef.current = () => {
       console.log('🧹 清理Socket连接');
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
       
       if (roomStateTimeoutRef.current) {
@@ -357,67 +392,128 @@ export const useSocket = (): UseSocketReturn => {
         roomStateTimeoutRef.current = null;
       }
     };
+
+    console.log('✅ Socket初始化完成');
   }, []);
+
+  // 初始化Socket连接
+  useEffect(() => {
+    if (initializedRef.current) {
+      console.log('⚠️ Socket已初始化，跳过重复初始化');
+      return;
+    }
+    
+    initializedRef.current = true;
+    console.log('🚀 开始初始化Socket...');
+    
+    initializeSocket();
+
+    // 清理函数
+    return () => {
+      console.log('🧹 useEffect清理函数被调用');
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+      initializedRef.current = false;
+    };
+  }, [initializeSocket]);
 
   // 手动登录函数
   const login = useCallback((userId: string, username: string, password: string, roomId: string = 'main') => {
     return new Promise<void>((resolve, reject) => {
-      if (!socketRef.current || !isConnected) {
-        reject(new Error('Socket未连接'));
+      if (!socketRef.current) {
+        reject(new Error('Socket未初始化'));
         return;
       }
 
-      console.log('📡 发送登录请求...', { userId, username, roomId });
+      if (!socketRef.current.connected) {
+        console.log('⚠️ Socket未连接，等待连接后重试...');
+        
+        // 等待Socket连接
+        const connectTimeout = setTimeout(() => {
+          reject(new Error('Socket连接超时，请检查服务器状态'));
+        }, 15000);
 
-      // 清除之前的超时
-      if (roomStateTimeoutRef.current) {
-        clearTimeout(roomStateTimeoutRef.current);
-        roomStateTimeoutRef.current = null;
+        const onConnect = () => {
+          clearTimeout(connectTimeout);
+          socketRef.current?.off('connect', onConnect);
+          
+          // 连接成功后继续登录流程
+          performLogin();
+        };
+
+        socketRef.current.on('connect', onConnect);
+        
+        // 如果Socket未连接，尝试手动连接
+        if (!socketRef.current.connected && !socketRef.current.disconnected) {
+          socketRef.current.connect();
+        }
+        
+        return;
       }
 
-      // 设置登录promise引用
-      pendingLoginResolveRef.current = () => {
-        // 保存凭据和登录状态到本地存储
-        saveCredentials(userId, username, password, roomId);
-        if (currentUser) {
-          saveLoginState(currentUser);
+      // Socket已连接，直接执行登录
+      performLogin();
+
+      function performLogin() {
+        if (!socketRef.current) {
+          reject(new Error('Socket未初始化'));
+          return;
         }
-        resolve();
-      };
-      pendingLoginRejectRef.current = reject;
 
-      // 设置10秒超时
-      const timeout = window.setTimeout(() => {
-        setLoginError('登录超时，请检查网络连接或稍后再试');
-        pendingLoginResolveRef.current = null;
-        pendingLoginRejectRef.current = null;
-        reject(new Error('登录超时'));
-      }, 10000);
-      roomStateTimeoutRef.current = timeout;
+        console.log('📡 发送登录请求...', { userId, username, roomId });
 
-      // 监听错误响应
-      const handleLoginError = (error: { message: string }) => {
-        clearTimeout(timeout);
-        roomStateTimeoutRef.current = null;
-        console.error('❌ 登录错误:', error.message);
-        setLoginError(error.message);
-        pendingLoginResolveRef.current = null;
-        pendingLoginRejectRef.current = null;
-        reject(new Error(error.message));
-      };
+        // 清除之前的超时
+        if (roomStateTimeoutRef.current) {
+          clearTimeout(roomStateTimeoutRef.current);
+          roomStateTimeoutRef.current = null;
+        }
 
-      // 注册一次性错误监听器
-      socketRef.current.once('error', handleLoginError);
+        // 设置登录promise引用
+        pendingLoginResolveRef.current = () => {
+          // 保存凭据和登录状态到本地存储
+          saveCredentials(userId, username, password, roomId);
+          if (currentUser) {
+            saveLoginState(currentUser);
+          }
+          resolve();
+        };
+        pendingLoginRejectRef.current = reject;
 
-      // 发送join_room请求（不是login）
-      socketRef.current.emit('join_room', { 
-        roomId, 
-        username, 
-        userId, 
-        password 
-      });
+        // 设置10秒超时
+        const timeout = window.setTimeout(() => {
+          setLoginError('登录超时，请检查网络连接或稍后再试');
+          pendingLoginResolveRef.current = null;
+          pendingLoginRejectRef.current = null;
+          reject(new Error('登录超时'));
+        }, 10000);
+        roomStateTimeoutRef.current = timeout;
+
+        // 监听错误响应
+        const handleLoginError = (error: { message: string }) => {
+          clearTimeout(timeout);
+          roomStateTimeoutRef.current = null;
+          console.error('❌ 登录错误:', error.message);
+          setLoginError(error.message);
+          pendingLoginResolveRef.current = null;
+          pendingLoginRejectRef.current = null;
+          reject(new Error(error.message));
+        };
+
+        // 注册一次性错误监听器
+        socketRef.current.once('error', handleLoginError);
+
+        // 发送join_room请求（不是login）
+        socketRef.current.emit('join_room', { 
+          roomId, 
+          username, 
+          userId, 
+          password 
+        });
+      }
     });
-  }, [isConnected, saveCredentials, saveLoginState, currentUser]);
+  }, [saveCredentials, saveLoginState, currentUser]);
 
   // 自动登录函数
   const attemptAutoLogin = useCallback(() => {

@@ -7,5 +7,14 @@
     "color": "#85C1E9",
     "createdAt": "2025-06-11T14:27:57.244Z",
     "lastLogin": "2025-06-11T14:33:10.899Z"
+  },
+  "测试用户": {
+    "username": "测试用户",
+    "normalizedUsername": "测试用户",
+    "providedUserId": "TestUser123",
+    "passwordHash": "$2b$10$m2DCDyP2kr862QvEiRFff.nXHEQQzpM/DfELi.qh2ou4m.4rwYdcK",
+    "color": "#96CEB4",
+    "createdAt": "2025-06-12T14:41:14.769Z",
+    "lastLogin": "2025-06-12T14:41:14.771Z"
   }
 }

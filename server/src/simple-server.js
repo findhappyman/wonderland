@@ -37,7 +37,19 @@ const io = new Server(server, {
     ].filter(Boolean), // 过滤掉undefined值
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  // Railway WebSocket 配置优化
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  upgradeTimeout: 30000,
+  pingTimeout: 25000,
+  pingInterval: 20000,
+  // 关键：启用粘性会话支持
+  sticky: true,
+  // 适应云端部署的配置
+  serveClient: false,
+  // 增加连接超时时间
+  connectTimeout: 45000
 });
 
 // 数据文件路径
@@ -361,9 +373,21 @@ function isUsernameExists(roomId, username) {
 io.on('connection', (socket) => {
   const clientIP = getClientIP(socket);
   console.log(`🔗 用户连接: ${socket.id}, IP: ${clientIP}`);
+  console.log(`🔧 连接传输方式: ${socket.conn.transport.name}`);
+  console.log(`🌐 连接来源: ${socket.handshake.headers.origin || 'unknown'}`);
   
   let currentUser = null;
   let currentRoomId = null;
+
+  // 监听传输升级
+  socket.conn.on('upgrade', () => {
+    console.log(`🔄 Socket ${socket.id} 升级到 WebSocket`);
+  });
+
+  // 监听传输降级
+  socket.conn.on('upgradeError', (error) => {
+    console.log(`❌ Socket ${socket.id} WebSocket升级失败:`, error.message);
+  });
 
   // 用户加入房间（支持用户名+密码登录）
   socket.on('join_room', async ({ roomId, username, userId, password }) => {
@@ -750,8 +774,21 @@ io.on('connection', (socket) => {
   });
 
   // 用户断开连接
-  socket.on('disconnect', async () => {
-    console.log(`用户断开连接: ${socket.id}, IP: ${clientIP}`);
+  socket.on('disconnect', async (reason) => {
+    console.log(`用户断开连接: ${socket.id}, IP: ${clientIP}, 原因: ${reason}`);
+    
+    // 记录详细的断开连接信息
+    if (reason === 'transport close') {
+      console.log(`⚠️ 传输层关闭 - 可能是网络问题或服务器重启`);
+    } else if (reason === 'client namespace disconnect') {
+      console.log(`👋 客户端主动断开连接`);
+    } else if (reason === 'ping timeout') {
+      console.log(`⏱️ Ping超时 - 网络延迟过高`);
+    } else if (reason === 'transport error') {
+      console.log(`❌ 传输错误 - WebSocket连接失败`);
+    } else {
+      console.log(`🔍 其他断开原因: ${reason}`);
+    }
     
     if (currentUser && currentRoomId) {
       const room = rooms.get(currentRoomId);

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录测试</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .logs {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Wonderland 登录测试</h1>
+    
+    <div id="connection-status" class="status info">
+        ⏳ 正在连接到服务器...
+    </div>
+    
+    <form id="login-form">
+        <div class="form-group">
+            <label for="userId">用户ID:</label>
+            <input type="text" id="userId" value="TestUser123" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="username">用户名:</label>
+            <input type="text" id="username" value="测试用户" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">密码:</label>
+            <input type="password" id="password" value="testpass123" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="roomId">房间ID:</label>
+            <input type="text" id="roomId" value="main" required>
+        </div>
+        
+        <button type="submit" id="login-btn" disabled>🚀 登录</button>
+        <button type="button" id="logout-btn" style="margin-left: 10px; background-color: #dc3545;" disabled>🚪 登出</button>
+    </form>
+    
+    <div class="logs" id="logs"></div>
+
+    <script>
+        // 创建Socket连接
+        const socket = io('http://localhost:8080', {
+            transports: ['websocket', 'polling'],
+            autoConnect: true,
+            timeout: 10000,
+            forceNew: true
+        });
+
+        const connectionStatus = document.getElementById('connection-status');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const logs = document.getElementById('logs');
+        
+        let isLoggedIn = false;
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logEntry.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#6c757d';
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        // Socket事件监听
+        socket.on('connect', () => {
+            connectionStatus.className = 'status success';
+            connectionStatus.textContent = '✅ 已连接到服务器 (ID: ' + socket.id + ')';
+            loginBtn.disabled = false;
+            addLog('Socket连接成功，ID: ' + socket.id, 'success');
+        });
+
+        socket.on('disconnect', () => {
+            connectionStatus.className = 'status error';
+            connectionStatus.textContent = '❌ 与服务器断开连接';
+            loginBtn.disabled = true;
+            logoutBtn.disabled = true;
+            isLoggedIn = false;
+            addLog('Socket连接断开', 'error');
+        });
+
+        socket.on('connect_error', (error) => {
+            connectionStatus.className = 'status error';
+            connectionStatus.textContent = '❌ 连接失败: ' + error.message;
+            addLog('连接错误: ' + error.message, 'error');
+        });
+
+        socket.on('room_state', (data) => {
+            addLog('收到房间状态: ' + JSON.stringify(data), 'success');
+            isLoggedIn = true;
+            loginBtn.disabled = true;
+            logoutBtn.disabled = false;
+            connectionStatus.className = 'status success';
+            connectionStatus.textContent = '🎉 登录成功！房间用户数: ' + data.users.length;
+        });
+
+        socket.on('error', (error) => {
+            addLog('服务器错误: ' + error.message, 'error');
+            connectionStatus.className = 'status error';
+            connectionStatus.textContent = '❌ 登录失败: ' + error.message;
+        });
+
+        socket.on('user_joined', (data) => {
+            addLog('用户加入: ' + JSON.stringify(data), 'info');
+        });
+
+        socket.on('user_left', (data) => {
+            addLog('用户离开: ' + JSON.stringify(data), 'info');
+        });
+
+        // 监听所有事件
+        socket.onAny((eventName, ...args) => {
+            addLog('收到事件: ' + eventName + ' - ' + JSON.stringify(args), 'info');
+        });
+
+        // 表单提交处理
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const userId = document.getElementById('userId').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const roomId = document.getElementById('roomId').value;
+
+            addLog('发送登录请求: ' + JSON.stringify({ userId, username, roomId }), 'info');
+            
+            socket.emit('join_room', {
+                roomId,
+                username,
+                userId,
+                password
+            });
+        });
+
+        // 登出处理
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            addLog('发送登出请求', 'info');
+            socket.emit('logout');
+            isLoggedIn = false;
+            loginBtn.disabled = false;
+            logoutBtn.disabled = true;
+            connectionStatus.className = 'status info';
+            connectionStatus.textContent = '⏳ 已登出';
+        });
+
+        addLog('页面加载完成，等待Socket连接...', 'info');
+    </script>
+</body>
+</html> 
