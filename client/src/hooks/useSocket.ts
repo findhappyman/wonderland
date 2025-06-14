@@ -166,12 +166,7 @@ export const useSocket = (): UseSocketReturn => {
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
       // 云端部署特殊配置
-      withCredentials: true,
-      // 增加握手超时
-      handshakeTimeout: 20000,
-      // 增加心跳配置
-      heartbeatTimeout: 20000,
-      heartbeatInterval: 15000
+      withCredentials: true
     });
 
     socketRef.current = newSocket;
