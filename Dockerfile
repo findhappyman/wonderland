@@ -9,7 +9,7 @@ COPY client/package*.json ./client/
 COPY server/package*.json ./server/
 
 # 安装依赖
-RUN cd client && npm ci --only=production
+RUN cd client && npm ci  # 客户端需要开发依赖来构建
 RUN cd server && npm ci --only=production
 
 # 复制源代码
