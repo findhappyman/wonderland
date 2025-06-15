@@ -5,5 +5,17 @@ export default defineConfig({
     server: {
         port: 3002,
         host: true
+    },
+    build: {
+        // Optimize for cloud deployment
+        target: 'es2020',
+        minify: 'esbuild',
+        sourcemap: false,
+        // Increase chunk size warning limit
+        chunkSizeWarningLimit: 1000
+    },
+    optimizeDeps: {
+        // Pre-bundle dependencies to avoid issues
+        include: ['react', 'react-dom', 'socket.io-client']
     }
 });
